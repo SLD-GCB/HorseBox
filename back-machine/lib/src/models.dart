@@ -65,6 +65,8 @@ class AppSettings {
     this.themeMode = 'dark',
     this.autoConnect = false,
     this.logLimit = 800,
+    this.panelUrl = '',
+    this.panelPin = '',
   });
 
   final int mixedPort;
@@ -100,6 +102,10 @@ class AppSettings {
   final bool autoConnect;
   final int logLimit;
 
+  /// 面板地址（仅 HTTPS），以及用于 TLS 指纹固定的 SHA-256。
+  final String panelUrl;
+  final String panelPin;
+
   AppSettings copyWith({
     int? mixedPort,
     bool? allowLan,
@@ -119,6 +125,8 @@ class AppSettings {
     String? themeMode,
     bool? autoConnect,
     int? logLimit,
+    String? panelUrl,
+    String? panelPin,
   }) {
     return AppSettings(
       mixedPort: mixedPort ?? this.mixedPort,
@@ -139,6 +147,8 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       autoConnect: autoConnect ?? this.autoConnect,
       logLimit: logLimit ?? this.logLimit,
+      panelUrl: panelUrl ?? this.panelUrl,
+      panelPin: panelPin ?? this.panelPin,
     );
   }
 
@@ -161,6 +171,8 @@ class AppSettings {
         'theme_mode': themeMode,
         'auto_connect': autoConnect,
         'log_limit': logLimit,
+        'panel_url': panelUrl,
+        'panel_pin': panelPin,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -201,6 +213,8 @@ class AppSettings {
       themeMode: json['theme_mode'] as String? ?? 'dark',
       autoConnect: json['auto_connect'] as bool? ?? false,
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
+      panelUrl: json['panel_url'] as String? ?? '',
+      panelPin: json['panel_pin'] as String? ?? '',
     );
   }
 }

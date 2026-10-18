@@ -49,7 +49,7 @@ if not exist "%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-all\%GRADLE_HASH%
 
 set "ANDROID_HOME=%SDK%"
 set "ANDROID_NDK_HOME=%SDK%\ndk\%NDK_VER%"
-set "PATH=%JAVA_HOME%\bin;%SDK%\platform-tools;C:\Windows\System32;C:\Windows;C:\Program Files\Git\cmd;%PATH%"
+set "PATH=%ROOT%tools;%JAVA_HOME%\bin;%SDK%\platform-tools;C:\Windows\System32;C:\Windows;C:\Program Files\Git\cmd;%PATH%"
 
 set "DEFVER="
 "%FINDSTR%" /b "version:" "%UI%\pubspec.yaml" > "%TEMP%\hbver.txt" 2>nul
@@ -62,7 +62,8 @@ if not defined DEFVER set "DEFVER=0.1.0"
 set "VER="
 set /p "VER=输入版本号（回车默认 %DEFVER%）: "
 if not defined VER set "VER=%DEFVER%"
-echo [版本] %VER%
+set "BUILD=%VER:.=%"
+echo [版本] %VER% (build %BUILD%)
 echo.
 
 if not exist "%DIST%" mkdir "%DIST%"
@@ -86,8 +87,11 @@ if /i not "%CLEAN%"=="0" (
   )
 )
 
+echo [0/4] 修补依赖插件...
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\patch-plugins.ps1"
+
 echo [1/4] 构建 Windows Release...
-call "%FLUTTER%" build windows --release
+call "%FLUTTER%" build windows --release --no-tree-shake-icons
 if errorlevel 1 (
   popd
   goto fail
@@ -114,7 +118,7 @@ if errorlevel 1 (
   popd
   goto fail
 )
-call "%FLUTTER%" build apk --release --target-platform android-arm64,android-x64 --split-per-abi --build-name=%VER% --build-number=1
+call "%FLUTTER%" build apk --release --no-tree-shake-icons --target-platform android-arm64,android-x64 --split-per-abi --build-name=%VER% --build-number=%BUILD%
 if errorlevel 1 (
   popd
   goto fail

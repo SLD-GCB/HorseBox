@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../pages/connections_page.dart';
 import '../pages/home_page.dart';
 import '../pages/logs_page.dart';
+import '../pages/panel_page.dart';
 import '../pages/profiles_page.dart';
 import '../pages/settings_page.dart';
 import '../state/app_state.dart';
@@ -22,12 +23,14 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _navCollapsed = false;
 
   static const _items = <CapsuleNavItem>[
     CapsuleNavItem(label: '首页', icon: Icons.bolt_outlined, activeIcon: Icons.bolt),
     CapsuleNavItem(label: '订阅', icon: Icons.cloud_outlined, activeIcon: Icons.cloud),
     CapsuleNavItem(label: '日志', icon: Icons.article_outlined, activeIcon: Icons.article),
     CapsuleNavItem(label: '连接', icon: Icons.swap_vert_outlined, activeIcon: Icons.swap_vert),
+    CapsuleNavItem(label: '面板', icon: Icons.apps, activeIcon: Icons.apps),
     CapsuleNavItem(label: '设置', icon: Icons.settings_outlined, activeIcon: Icons.settings),
   ];
 
@@ -36,6 +39,7 @@ class _HomeShellState extends State<HomeShell> {
         ProfilesPage(state: widget.state),
         LogsPage(state: widget.state),
         ConnectionsPage(state: widget.state),
+        PanelPage(state: widget.state),
         SettingsPage(state: widget.state),
       ];
 
@@ -46,40 +50,100 @@ class _HomeShellState extends State<HomeShell> {
     if (desktop) {
       return Scaffold(
         body: SafeArea(
-          child: Row(
+          child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 20, 8, 20),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: CapsuleNav(
-                    items: _items,
-                    index: _index,
-                    onChanged: (value) => setState(() => _index = value),
-                    axis: Axis.vertical,
+              Positioned.fill(child: body),
+              Positioned(
+                left: 14,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_navCollapsed)
+                        CapsuleNav(
+                          items: _items,
+                          index: _index,
+                          onChanged: (value) => setState(() {
+                            _index = value;
+                            _navCollapsed = false;
+                          }),
+                          axis: Axis.vertical,
+                        ),
+                      const SizedBox(height: 8),
+                      Material(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => setState(() => _navCollapsed = !_navCollapsed),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Icon(
+                              _navCollapsed ? Icons.chevron_right : Icons.chevron_left,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              Expanded(child: body),
             ],
           ),
         ),
       );
     }
+    final isPanel = _pages[_index] is PanelPage;
     return Scaffold(
-      body: SafeArea(child: body),
+      extendBody: isPanel,
+      body: isPanel ? body : SafeArea(child: body),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              CapsuleNav(
-                items: _items,
-                index: _index,
-                onChanged: (value) => setState(() => _index = value),
-              ),
+              if (isPanel)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    shape: const StadiumBorder(),
+                    child: InkWell(
+                      customBorder: const StadiumBorder(),
+                      onTap: () => setState(() => _navCollapsed = !_navCollapsed),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Icon(
+                          _navCollapsed
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (!isPanel || !_navCollapsed)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CapsuleNav(
+                      items: _items,
+                      index: _index,
+                      onChanged: (value) => setState(() {
+                        _index = value;
+                        _navCollapsed = false;
+                      }),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),

@@ -80,7 +80,6 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: item.label,
       waitDuration: const Duration(milliseconds: 400),
@@ -89,16 +88,16 @@ class _NavButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          width: 46,
-          height: 46,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
-            color: selected ? scheme.primary.withValues(alpha: 0.18) : Colors.transparent,
+            color: selected ? Colors.white.withValues(alpha: 0.16) : Colors.transparent,
             shape: BoxShape.circle,
           ),
           child: Icon(
             selected ? item.activeIcon : item.icon,
             size: 22,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            color: Colors.white,
           ),
         ),
       ),
