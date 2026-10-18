@@ -201,6 +201,36 @@ void main() {
     expect(rules.any((item) => item['action'] == 'resolve'), isTrue);
   });
 
+  test('Google 下载域名强制走代理且优先于国内直连', () {
+    final withProxy = raw.replaceFirst(
+      '"outbounds": [{"type": "direct", "tag": "direct"}]',
+      '"outbounds": [{"type": "shadowsocks", "tag": "proxy", "server": "1.1.1.1", "server_port": 8388, "method": "aes-128-gcm", "password": "x"}, {"type": "direct", "tag": "direct"}]',
+    );
+    final text = patchClientConfig(
+      withProxy,
+      const ClientConfigOptions(
+        mixedPort: 7890,
+        clashPort: 19090,
+        rulesDir: '/data/rules',
+      ),
+    );
+    final cfg = jsonDecode(text) as Map<String, dynamic>;
+    final rules = ((cfg['route'] as Map)['rules'] as List).cast<Map>();
+    final googleIndex = rules.indexWhere((item) =>
+        (item['domain_suffix'] as List?)?.contains('gvt1.com') == true);
+    final cnIndex = rules.indexWhere((item) =>
+        (item['rule_set'] as List?)?.contains('geosite-cn') == true);
+    expect(googleIndex, greaterThanOrEqualTo(0));
+    expect(cnIndex, greaterThan(googleIndex));
+    expect(rules[googleIndex]['outbound'], 'proxy');
+
+    final ipIndex = rules.indexWhere((item) =>
+        (item['ip_cidr'] as List?)?.contains('142.250.0.0/15') == true);
+    expect(ipIndex, greaterThanOrEqualTo(0));
+    expect(cnIndex, greaterThan(ipIndex));
+    expect(rules[ipIndex]['outbound'], 'proxy');
+  });
+
   test('system 栈回落到 mixed', () {
     expect(normalizeTunStack('system'), 'mixed');
     expect(normalizeTunStack('gvisor'), 'gvisor');

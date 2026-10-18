@@ -198,11 +198,13 @@ class VpnPlugin(private val activity: Activity) :
         private const val REQUEST_VPN = 0x5601
         private const val REQUEST_NOTIFICATION = 0x5602
 
-        /** YouTube 等 Google App 依赖 GMS，这三个系统应用允许被选进代理列表。 */
+        /** YouTube / Play 等 Google 应用依赖的系统组件，允许被选进代理列表。 */
         private val PROXY_SYSTEM_APPS = setOf(
             "com.google.android.gms",
             "com.google.android.gsf",
             "com.android.vending",
+            "com.android.providers.downloads",
+            "com.android.providers.downloads.ui",
         )
 
         private val mainHandler = Handler(Looper.getMainLooper())

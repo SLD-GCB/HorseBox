@@ -393,7 +393,48 @@ void _applyRouteRules(Map<String, dynamic> root, ClientConfigOptions opts) {
   final rest = existing
       .where((item) => item['action'] != 'sniff' && item['action'] != 'hijack-dns')
       .toList();
-  route['rules'] = [...priority, ...userRules, ...cnRules, ...rest];
+  // Google 的下载重定向域名（redirector.gvt1.com 等）会被 geosite-cn 误判为
+  // 国内域名，导致 Play 下载走直连超时；这里强制走代理覆盖内置规则。
+  final googleRules = <Map<String, dynamic>>[];
+  final outboundTags = _asList(root['outbounds'])
+      .whereType<Map>()
+      .map((item) => item['tag'])
+      .whereType<String>()
+      .toSet();
+  if (outboundTags.contains('proxy')) {
+    googleRules.add(<String, dynamic>{
+      'domain_suffix': [
+        'gvt1.com',
+        'googlevideo.com',
+        'googleapis.com',
+        'google.com',
+        'gstatic.com',
+      ],
+      'outbound': 'proxy',
+    });
+    // Play 下载会直接连 Google 的 IP，sniff 拿不到域名，必须按 IP 段兜底。
+    googleRules.add(<String, dynamic>{
+      'ip_cidr': [
+        '142.250.0.0/15',
+        '172.217.0.0/16',
+        '216.58.192.0/19',
+        '74.125.0.0/16',
+        '108.177.0.0/17',
+        '209.85.128.0/17',
+        '64.233.160.0/19',
+        '216.239.32.0/19',
+      ],
+      'outbound': 'proxy',
+    });
+  }
+
+  route['rules'] = [
+    ...priority,
+    ...userRules,
+    ...googleRules,
+    ...cnRules,
+    ...rest,
+  ];
   if (ruleSets.isNotEmpty) route['rule_set'] = ruleSets;
   root['route'] = route;
 }
