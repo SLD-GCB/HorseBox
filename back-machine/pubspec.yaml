@@ -1,0 +1,11 @@
+name: horsebox_backend
+description: HorseBox 客户端后端：订阅、配置、内核、Clash API、本地存储
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  crypto: ^3.0.7
+  path: ^1.9.1
