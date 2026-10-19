@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
+import 'pinned_http.dart' as pinned;
 
 /// 订阅拉取失败，message 直接展示给用户。
 class SubscriptionException implements Exception {
@@ -33,15 +33,12 @@ class SubscriptionClient {
     });
   }
 
-  static String normalizePin(String pin) {
-    return pin.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toLowerCase();
-  }
+  static String normalizePin(String pin) => pinned.normalizePin(pin);
 
-  static bool isValidPin(String pin) => normalizePin(pin).length == 64;
+  static bool isValidPin(String pin) => pinned.isValidPin(pin);
 
-  static String fingerprint(X509Certificate cert) {
-    return sha256.convert(cert.der).toString();
-  }
+  static String fingerprint(X509Certificate cert) =>
+      pinned.fingerprint(cert.der);
 
   static Future<Map<String, dynamic>> fetch(
     String rawUrl, {
@@ -49,15 +46,18 @@ class SubscriptionClient {
     Duration timeout = const Duration(seconds: 20),
   }) async {
     final uri = buildUri(rawUrl);
-    final pin = normalizePin(certPin);
-    final client = HttpClient()
-      ..connectionTimeout = timeout
-      ..userAgent = userAgent;
-
-    client.badCertificateCallback = (cert, host, port) {
-      if (pin.isEmpty) return false;
-      return fingerprint(cert) == pin;
-    };
+    final pin = pinned.normalizePin(certPin);
+    if (pin.isNotEmpty && pin.length != 64) {
+      throw SubscriptionException('证书指纹格式不正确，应为 64 位十六进制');
+    }
+    final HttpClient client;
+    if (pin.length == 64 && uri.isScheme('https')) {
+      client = pinned.createPinnedHttpClient(pin, connectionTimeout: timeout);
+    } else {
+      // 没填指纹 / 明文地址：交给默认校验（自签证书会被拒绝）。
+      client = HttpClient()..connectionTimeout = timeout;
+    }
+    client.userAgent = userAgent;
 
     try {
       final request = await client.getUrl(uri).timeout(timeout);
@@ -82,7 +82,7 @@ class SubscriptionClient {
       return decoded;
     } on SubscriptionException {
       rethrow;
-    } on HandshakeException {
+    } on TlsException {
       throw SubscriptionException(
         pin.isEmpty
             ? '证书校验失败：面板使用自签证书时，请到「设置 → 安全」填写证书 SHA-256 指纹'

@@ -47,6 +47,11 @@ if not exist "%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-all\%GRADLE_HASH%
   goto fail
 )
 
+if not exist "%ROOT%tools\nuget.exe" (
+  echo [ERROR] missing tools\nuget.exe, WebView2 build needs it
+  goto fail
+)
+
 set "ANDROID_HOME=%SDK%"
 set "ANDROID_NDK_HOME=%SDK%\ndk\%NDK_VER%"
 set "PATH=%ROOT%tools;%JAVA_HOME%\bin;%SDK%\platform-tools;C:\Windows\System32;C:\Windows;C:\Program Files\Git\cmd;%PATH%"
@@ -89,6 +94,11 @@ if /i not "%CLEAN%"=="0" (
 
 echo [0/4] ÐÞ²¹ÒÀÀµ²å¼þ...
 "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\patch-plugins.ps1"
+if errorlevel 1 (
+  echo [ERROR] plugin patch failed, WebView2 would skip certificate pinning
+  popd
+  goto fail
+)
 
 echo [1/4] ¹¹½¨ Windows Release...
 call "%FLUTTER%" build windows --release --no-tree-shake-icons
