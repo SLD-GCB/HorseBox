@@ -151,8 +151,9 @@ set "SDK=%LOCALAPPDATA%\Android\Sdk"
 set "NDK_VER=27.2.12479018"
 ```
 
-脚本运行时会要求输入版本号，`--build-name` 使用该版本号，`--build-number` 为去掉点的数字。
-需要指定 versionCode 时直接给 `flutter build apk` 传 `--build-number=<数字>`。
+脚本运行时会要求输入版本号，`--build-name` 使用该版本号，`--build-number` 默认是去掉点的数字。
+注意 `--split-per-abi` 会由 Flutter 给 versionCode 加 ABI 偏移（arm64 +2000、x86_64 +4000），
+发布到 F-Droid 前确认新包的 versionCode 大于上一版。需要固定 versionCode 时先 `set BUILDNO=3014` 再运行脚本。
 
 ## 使用流程
 

@@ -68,6 +68,7 @@ set "VER="
 set /p "VER=输入版本号（回车默认 %DEFVER%）: "
 if not defined VER set "VER=%DEFVER%"
 set "BUILD=%VER:.=%"
+if defined BUILDNO set "BUILD=%BUILDNO%"
 echo [版本] %VER% (build %BUILD%)
 echo.
 
