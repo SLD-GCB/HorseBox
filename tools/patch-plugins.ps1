@@ -196,6 +196,23 @@ foreach ($hostDir in $hosts) {
   }
 }
 
+# 3. xterm 建立输入法连接时带 NO_SUGGESTIONS / NO_PERSONALIZED_LEARNING，华为、小米
+#    这类输入法会据此切成「安全键盘」。全部改成普通输入，交还给系统当前输入法。
+foreach ($hostDir in $hosts) {
+  $edit = Join-Path $hostDir "xterm-4.0.0\lib\src\ui\custom_text_edit.dart"
+  if (-not (Test-Path $edit)) { continue }
+  $text = Get-Content $edit -Raw
+  if ($text -match "horsebox-ime-v2") { continue }
+  $nl = [string][char]13 + [string][char]10
+  $text = $text.Replace("        autocorrect: false,", "        autocorrect: true,")
+  $text = $text.Replace("        enableSuggestions: false,", "        enableSuggestions: true,")
+  $replacement = "        // horsebox-ime-v2" + $nl + "        enableIMEPersonalizedLearning: true,"
+  $text = $text.Replace("        enableIMEPersonalizedLearning: false,", $replacement)
+  $text = $text.Replace("horsebox-ime-v1", "horsebox-ime-v2")
+  [System.IO.File]::WriteAllText($edit, $text, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "[patch] xterm IME flags patched"
+}
+
 # 校验：Windows 插件必须带上 horsebox-pin-v2，否则打出来的包会退回旧行为。
 $verified = $false
 foreach ($hostDir in $hosts) {

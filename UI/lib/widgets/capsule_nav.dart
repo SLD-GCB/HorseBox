@@ -21,6 +21,7 @@ class CapsuleNav extends StatelessWidget {
     required this.index,
     required this.onChanged,
     this.axis = Axis.horizontal,
+    this.compact = false,
   });
 
   final List<CapsuleNavItem> items;
@@ -28,30 +29,39 @@ class CapsuleNav extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final Axis axis;
 
+  /// 手机端用更小的尺寸，避免占掉太多竖向空间。
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final size = compact ? 34.0 : 42.0;
+    final iconSize = compact ? 18.0 : 22.0;
     final children = <Widget>[
       for (var i = 0; i < items.length; i++)
         Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: axis == Axis.horizontal ? 2 : 0,
+            horizontal: axis == Axis.horizontal ? (compact ? 1 : 2) : 0,
             vertical: axis == Axis.vertical ? 3 : 0,
           ),
           child: _NavButton(
             item: items[i],
             selected: i == index,
             onTap: () => onChanged(i),
+            size: size,
+            iconSize: iconSize,
           ),
         ),
     ];
 
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: EdgeInsets.all(compact ? 4 : 6),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.28)),
+        borderRadius: BorderRadius.circular(compact ? 24 : 30),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.28),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.28),
@@ -72,11 +82,15 @@ class _NavButton extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.onTap,
+    this.size = 42,
+    this.iconSize = 22,
   });
 
   final CapsuleNavItem item;
   final bool selected;
   final VoidCallback onTap;
+  final double size;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -88,15 +102,17 @@ class _NavButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          width: 42,
-          height: 42,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
-            color: selected ? Colors.white.withValues(alpha: 0.16) : Colors.transparent,
+            color: selected
+                ? Colors.white.withValues(alpha: 0.16)
+                : Colors.transparent,
             shape: BoxShape.circle,
           ),
           child: Icon(
             selected ? item.activeIcon : item.icon,
-            size: 22,
+            size: iconSize,
             color: Colors.white,
           ),
         ),

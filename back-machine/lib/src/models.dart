@@ -9,6 +9,8 @@ class Profile {
     required this.url,
     this.certPin = '',
     this.selectedNode = '',
+    this.quotaBytes = 0,
+    this.usedBytes = 0,
     DateTime? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now();
 
@@ -21,24 +23,37 @@ class Profile {
 
   /// 手动选择的节点 tag；空字符串表示自动（urltest）。
   String selectedNode;
+
+  /// 手动填写的流量总额（字节）；0 表示不限。
+  int quotaBytes;
+
+  /// 客户端本地累计的已用流量（字节），只算经本机转发的部分。
+  int usedBytes;
+
   DateTime updatedAt;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'url': url,
-        'cert_pin': certPin,
-        'selected_node': selectedNode,
-        'updated_at': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'url': url,
+    'cert_pin': certPin,
+    'selected_node': selectedNode,
+    'quota_bytes': quotaBytes,
+    'used_bytes': usedBytes,
+    'updated_at': updatedAt.toIso8601String(),
+  };
 
   factory Profile.fromJson(Map<String, dynamic> json) {
     return Profile(
-      id: json['id'] as String? ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
       name: json['name'] as String? ?? '未命名',
       url: json['url'] as String? ?? '',
       certPin: json['cert_pin'] as String? ?? '',
       selectedNode: json['selected_node'] as String? ?? '',
+      quotaBytes: (json['quota_bytes'] as num?)?.toInt() ?? 0,
+      usedBytes: (json['used_bytes'] as num?)?.toInt() ?? 0,
       updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
     );
   }
@@ -153,27 +168,27 @@ class AppSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'mixed_port': mixedPort,
-        'allow_lan': allowLan,
-        'enable_tun': enableTun,
-        'enable_ipv6': enableIpv6,
-        'proxy_apps': proxyApps,
-        'direct_apps': directApps,
-        'custom_rules': customRules.map((item) => item.toJson()).toList(),
-        'tun_stack': tunStack,
-        'tun_mtu': tunMtu,
-        'log_level': logLevel,
-        'dns_mode': dnsMode,
-        'dns_servers': dnsServers,
-        'dns_strategy': dnsStrategy,
-        'hosts': hosts,
-        'cert_pin': certPin,
-        'theme_mode': themeMode,
-        'auto_connect': autoConnect,
-        'log_limit': logLimit,
-        'panel_url': panelUrl,
-        'panel_pin': panelPin,
-      };
+    'mixed_port': mixedPort,
+    'allow_lan': allowLan,
+    'enable_tun': enableTun,
+    'enable_ipv6': enableIpv6,
+    'proxy_apps': proxyApps,
+    'direct_apps': directApps,
+    'custom_rules': customRules.map((item) => item.toJson()).toList(),
+    'tun_stack': tunStack,
+    'tun_mtu': tunMtu,
+    'log_level': logLevel,
+    'dns_mode': dnsMode,
+    'dns_servers': dnsServers,
+    'dns_strategy': dnsStrategy,
+    'hosts': hosts,
+    'cert_pin': certPin,
+    'theme_mode': themeMode,
+    'auto_connect': autoConnect,
+    'log_limit': logLimit,
+    'panel_url': panelUrl,
+    'panel_pin': panelPin,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final rawHosts = json['hosts'];
@@ -192,11 +207,23 @@ class AppSettings {
       allowLan: json['allow_lan'] as bool? ?? false,
       enableTun: json['enable_tun'] as bool? ?? true,
       enableIpv6: json['enable_ipv6'] as bool? ?? false,
-      proxyApps: (json['proxy_apps'] as List?)?.whereType<String>().toList(growable: false) ?? const [],
-      directApps: (json['direct_apps'] as List?)?.whereType<String>().toList(growable: false) ?? const [],
-      customRules: (json['custom_rules'] as List?)
+      proxyApps:
+          (json['proxy_apps'] as List?)?.whereType<String>().toList(
+            growable: false,
+          ) ??
+          const [],
+      directApps:
+          (json['direct_apps'] as List?)?.whereType<String>().toList(
+            growable: false,
+          ) ??
+          const [],
+      customRules:
+          (json['custom_rules'] as List?)
               ?.whereType<Map>()
-              .map((item) => RouteRuleSetting.fromJson(Map<String, dynamic>.from(item)))
+              .map(
+                (item) =>
+                    RouteRuleSetting.fromJson(Map<String, dynamic>.from(item)),
+              )
               .where((item) => item.value.isNotEmpty)
               .toList(growable: false) ??
           const [],
@@ -251,13 +278,20 @@ class LogEntry {
       final level = text.contains('ERROR') || text.contains('FATAL')
           ? 'ERROR'
           : text.contains('WARN')
-              ? 'WARN'
-              : 'INFO';
+          ? 'WARN'
+          : 'INFO';
       return LogEntry(time: now, level: level, message: text);
     }
     final parts = match.group(1)!.split(':').map(int.parse).toList();
     return LogEntry(
-      time: DateTime(now.year, now.month, now.day, parts[0], parts[1], parts[2]),
+      time: DateTime(
+        now.year,
+        now.month,
+        now.day,
+        parts[0],
+        parts[1],
+        parts[2],
+      ),
       level: match.group(2)!.toUpperCase(),
       message: match.group(3)!,
     );
@@ -305,7 +339,9 @@ class ConnectionRow {
           ? metadata['host'] as String
           : '${metadata['destinationIP'] ?? ''}:${metadata['destinationPort'] ?? ''}',
       rule: json['rule'] as String? ?? '',
-      chains: chains is List ? chains.whereType<String>().toList(growable: false) : const [],
+      chains: chains is List
+          ? chains.whereType<String>().toList(growable: false)
+          : const [],
       upload: (json['upload'] as num?)?.toInt() ?? 0,
       download: (json['download'] as num?)?.toInt() ?? 0,
       start: DateTime.tryParse(json['start'] as String? ?? ''),
@@ -315,7 +351,8 @@ class ConnectionRow {
 
 /// `system` 栈在 Android 上会卡死、在 Windows 上容易超时，客户端只保留
 /// mixed / gvisor 两种稳定值；旧配置里的 system 统一回落到 mixed。
-String normalizeTunStack(String? value) => value == 'gvisor' ? 'gvisor' : 'mixed';
+String normalizeTunStack(String? value) =>
+    value == 'gvisor' ? 'gvisor' : 'mixed';
 
 /// 订阅里的一个节点（来自 sing-box outbounds）。
 class SubscriptionNode {
@@ -351,7 +388,6 @@ class SubscriptionNode {
   }
 }
 
-
 /// 用户自定义的一条分流规则。
 class RouteRuleSetting {
   const RouteRuleSetting({
@@ -368,10 +404,10 @@ class RouteRuleSetting {
   final String outbound;
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'value': value,
-        'outbound': outbound,
-      };
+    'type': type,
+    'value': value,
+    'outbound': outbound,
+  };
 
   factory RouteRuleSetting.fromJson(Map<String, dynamic> json) {
     return RouteRuleSetting(
@@ -381,3 +417,140 @@ class RouteRuleSetting {
     );
   }
 }
+
+/// 一条 SSH 主机配置（「配置」页手动添加）。
+class SshHost {
+  SshHost({
+    required this.id,
+    this.name = '',
+    required this.host,
+    this.port = 22,
+    required this.username,
+    this.password = '',
+    this.fingerprint = '',
+  });
+
+  final String id;
+  String name;
+  String host;
+  int port;
+  String username;
+  String password;
+
+  /// 首次连接记录的主机密钥 SHA-256（十六进制），之后每次连接都必须一致。
+  String fingerprint;
+
+  /// 这台主机配置的本地端口转发规则。
+  final List<SshForward> forwards = [];
+
+  String get label => name.trim().isEmpty ? username + '@' + host : name;
+
+  String get endpoint => username + '@' + host + ':' + port.toString();
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'host': host,
+    'port': port,
+    'username': username,
+    'password': password,
+    'fingerprint': fingerprint,
+    'forwards': forwards.map((item) => item.toJson()).toList(),
+  };
+
+  factory SshHost.fromJson(Map<String, dynamic> json) {
+    return SshHost(
+        id:
+            json['id'] as String? ??
+            DateTime.now().microsecondsSinceEpoch.toString(),
+        name: json['name'] as String? ?? '',
+        host: json['host'] as String? ?? '',
+        port: (json['port'] as num?)?.toInt() ?? 22,
+        username: json['username'] as String? ?? '',
+        password: json['password'] as String? ?? '',
+        fingerprint: json['fingerprint'] as String? ?? '',
+      )
+      ..forwards.addAll(
+        (json['forwards'] as List? ?? const []).whereType<Map>().map(
+          (item) => SshForward.fromJson(Map<String, dynamic>.from(item)),
+        ),
+      );
+  }
+}
+
+/// 一条本地端口转发规则：把 127.0.0.1:localPort 转发到远端 host:port。
+class SshForward {
+  SshForward({
+    required this.id,
+    this.label = '',
+    required this.localPort,
+    required this.host,
+    required this.port,
+  });
+
+  final String id;
+  String label;
+  int localPort;
+  String host;
+  int port;
+
+  String get title => label.trim().isEmpty ? summary : label.trim();
+
+  String get summary => '127.0.0.1:$localPort → $host:$port';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'label': label,
+    'local_port': localPort,
+    'host': host,
+    'port': port,
+  };
+
+  factory SshForward.fromJson(Map<String, dynamic> json) {
+    return SshForward(
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      label: json['label'] as String? ?? '',
+      localPort: (json['local_port'] as num?)?.toInt() ?? 0,
+      host: json['host'] as String? ?? '127.0.0.1',
+      port: (json['port'] as num?)?.toInt() ?? 80,
+    );
+  }
+}
+
+/// 面板登录凭据：一个面板一条，登录时一键填入。
+class PanelCredential {
+  PanelCredential({
+    required this.id,
+    required this.panel,
+    required this.username,
+    this.password = '',
+  });
+
+  final String id;
+
+  /// 面板地址，去掉协议和尾部斜杠，用作去重键。
+  String panel;
+  String username;
+  String password;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'panel': panel,
+    'username': username,
+    'password': password,
+  };
+
+  factory PanelCredential.fromJson(Map<String, dynamic> json) {
+    return PanelCredential(
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      panel: json['panel'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      password: json['password'] as String? ?? '',
+    );
+  }
+}
+

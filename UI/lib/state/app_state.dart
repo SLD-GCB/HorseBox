@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:horsebox_backend/horsebox_backend.dart';
+
+import '../security/secret_vault.dart';
+
 import 'package:path/path.dart' as p;
 
 import '../platform/vpn_channel.dart';
@@ -17,6 +20,8 @@ class AppState extends ChangeNotifier {
   AppState(this._store, this._dataDir);
 
   static const _kProfiles = 'profiles';
+  static const _kSshHosts = 'ssh_hosts';
+  static const _kCredentials = 'panel_credentials';
   static const _kActive = 'active_profile';
   static const _kSettings = 'settings';
 
@@ -25,7 +30,10 @@ class AppState extends ChangeNotifier {
   String _rulesDir = '';
   final VpnChannel _vpn = VpnChannel();
 
-  List<Profile> _profiles = [];
+  final List<Profile> _profiles = [];
+  final List<SshHost> _sshHosts = [];
+  final List<PanelCredential> _credentials = [];
+  SecretVault? _vault;
   String? _activeId;
   AppSettings _settings = const AppSettings();
 
@@ -51,9 +59,17 @@ class AppState extends ChangeNotifier {
   bool _busy = false;
   bool _disposed = false;
 
+  /// 本地流量累计：按每秒速率对时间积分，记到连接时使用的那个订阅上。
+  Profile? _usageTarget;
+  DateTime _lastTrafficAt = DateTime.now();
+  int _usageSincePersist = 0;
+
   List<Profile> get profiles => List.unmodifiable(_profiles);
+  List<SshHost> get sshHosts => List.unmodifiable(_sshHosts);
+  List<PanelCredential> get credentials => List.unmodifiable(_credentials);
   String? get activeId => _activeId;
-  Profile? get activeProfile => _profiles.where((item) => item.id == _activeId).firstOrNull;
+  Profile? get activeProfile =>
+      _profiles.where((item) => item.id == _activeId).firstOrNull;
   AppSettings get settings => _settings;
   CoreStatus get status => _status;
   String? get error => _error;
@@ -65,15 +81,35 @@ class AppState extends ChangeNotifier {
   String get dataDir => _dataDir;
   bool get busy => _busy;
   bool get isConnected => _status == CoreStatus.connected;
-  Duration get uptime => _connectedAt == null ? Duration.zero : DateTime.now().difference(_connectedAt!);
+  Duration get uptime => _connectedAt == null
+      ? Duration.zero
+      : DateTime.now().difference(_connectedAt!);
 
   Future<void> init() async {
+    _vault = await SecretVault.open(_dataDir);
     final rawProfiles = _store.get(_kProfiles);
     if (rawProfiles is List) {
-      _profiles = rawProfiles
-          .whereType<Map>()
-          .map((item) => Profile.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
+      for (final item in rawProfiles.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(item);
+        map['url'] = await _unseal(map['url'] as String? ?? '');
+        _profiles.add(Profile.fromJson(map));
+      }
+    }
+    final rawHosts = _store.get(_kSshHosts);
+    if (rawHosts is List) {
+      for (final item in rawHosts.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(item);
+        map['password'] = await _unseal(map['password'] as String? ?? '');
+        _sshHosts.add(SshHost.fromJson(map));
+      }
+    }
+    final rawCredentials = _store.get(_kCredentials);
+    if (rawCredentials is List) {
+      for (final item in rawCredentials.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(item);
+        map['password'] = await _unseal(map['password'] as String? ?? '');
+        _credentials.add(PanelCredential.fromJson(map));
+      }
     }
     _activeId = _store.getString(_kActive);
     if (_activeId != null && !_profiles.any((item) => item.id == _activeId)) {
@@ -97,9 +133,148 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------------------------------------------------------------- 密码本
+
+  /// 面板地址归一化：去掉协议、路径和尾部斜杠，只留 host:port，用作去重键。
+  static String normalizePanel(String raw) {
+    var text = raw.trim();
+    if (text.isEmpty) return '';
+    text = text.replaceFirst(RegExp('^[a-zA-Z]+://'), '');
+    final slash = text.indexOf('/');
+    if (slash >= 0) text = text.substring(0, slash);
+    return text.toLowerCase();
+  }
+
+  /// 新增或修改一条面板凭据；面板重复时返回错误文案，成功返回 null。
+  Future<String?> saveCredential({
+    String? id,
+    required String panel,
+    required String username,
+    required String password,
+  }) async {
+    final key = normalizePanel(panel);
+    if (key.isEmpty) return '请填写面板地址';
+    if (username.trim().isEmpty) return '请填写用户名';
+    if (_credentials.any((item) => item.id != id && item.panel == key)) {
+      return '这个面板已经有一条记录了';
+    }
+    final existing = id == null
+        ? null
+        : _credentials.where((item) => item.id == id).firstOrNull;
+    if (existing == null) {
+      _credentials.add(
+        PanelCredential(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          panel: key,
+          username: username.trim(),
+          password: password,
+        ),
+      );
+    } else {
+      existing.panel = key;
+      existing.username = username.trim();
+      existing.password = password;
+    }
+    await _persistCredentials();
+    _notify();
+    return null;
+  }
+
+  Future<void> removeCredential(String id) async {
+    _credentials.removeWhere((item) => item.id == id);
+    await _persistCredentials();
+    _notify();
+  }
+
+  Future<void> _persistCredentials() async {
+    final rows = <Map<String, dynamic>>[];
+    for (final item in _credentials) {
+      final row = item.toJson();
+      row['password'] = await _seal(item.password);
+      rows.add(row);
+    }
+    await _store.set(_kCredentials, rows);
+  }
+
+  // ---------------------------------------------------------------- SSH 主机
+
+  Future<SshHost> addSshHost({
+    required String host,
+    required String username,
+    String password = '',
+    String name = '',
+    int port = 22,
+  }) async {
+    final item = SshHost(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name.trim(),
+      host: host.trim(),
+      port: port,
+      username: username.trim(),
+      password: password,
+    );
+    _sshHosts.add(item);
+    await _persistHosts();
+    _notify();
+    return item;
+  }
+
+  Future<void> updateSshHost(
+    SshHost item, {
+    String? host,
+    String? username,
+    String? password,
+    String? name,
+    int? port,
+  }) async {
+    if (host != null && host.trim().isNotEmpty) item.host = host.trim();
+    if (username != null && username.trim().isNotEmpty) {
+      item.username = username.trim();
+    }
+    if (password != null) item.password = password;
+    if (name != null) item.name = name.trim();
+    if (port != null && port > 0 && port <= 65535) item.port = port;
+    await _persistHosts();
+    _notify();
+  }
+
+  Future<void> removeSshHost(String id) async {
+    _sshHosts.removeWhere((item) => item.id == id);
+    await _persistHosts();
+    _notify();
+  }
+
+  /// 首次连接时记住主机密钥指纹。
+  Future<void> saveSshFingerprint(String id, String fingerprint) async {
+    final item = _sshHosts.where((host) => host.id == id).firstOrNull;
+    if (item == null) return;
+    item.fingerprint = fingerprint;
+    await _persistHosts();
+  }
+
+  /// 端口转发规则存在主机里，改完直接落盘。
+  Future<void> saveSshForwards(SshHost host) async {
+    await _persistHosts();
+    _notify();
+  }
+
+  Future<void> _persistHosts() async {
+    final rows = <Map<String, dynamic>>[];
+    for (final item in _sshHosts) {
+      final row = item.toJson();
+      row['password'] = await _seal(item.password);
+      rows.add(row);
+    }
+    await _store.set(_kSshHosts, rows);
+  }
+
   // ---------------------------------------------------------------- 订阅
 
-  Future<void> addProfile(String url, {String name = '', String certPin = ''}) async {
+  Future<void> addProfile(
+    String url, {
+    String name = '',
+    String certPin = '',
+  }) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
       throw const FormatException('订阅地址必须以 http:// 或 https:// 开头');
@@ -110,7 +285,9 @@ class AppState extends ChangeNotifier {
     }
     final profile = Profile(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: name.trim().isEmpty ? (uri.host.isEmpty ? '订阅' : uri.host) : name.trim(),
+      name: name.trim().isEmpty
+          ? (uri.host.isEmpty ? '订阅' : uri.host)
+          : name.trim(),
       url: trimmed,
       certPin: certPin.trim(),
     );
@@ -120,11 +297,51 @@ class AppState extends ChangeNotifier {
     _notify();
   }
 
+  /// 修改已有订阅的地址、名称、指纹。地址改了会顺手把节点缓存作废（UI 那边处理）。
+  Future<void> updateProfile(
+    Profile profile, {
+    String? url,
+    String? name,
+    String? certPin,
+  }) async {
+    final nextUrl = url?.trim() ?? '';
+    if (nextUrl.isNotEmpty) {
+      final uri = Uri.tryParse(nextUrl);
+      if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+        throw const FormatException('订阅地址必须以 http:// 或 https:// 开头');
+      }
+      if (_profiles.any(
+        (item) => item.id != profile.id && item.url == nextUrl,
+      )) {
+        throw const FormatException('这个订阅已经添加过了');
+      }
+      profile.url = nextUrl;
+    }
+    if (name != null && name.trim().isNotEmpty) profile.name = name.trim();
+    if (certPin != null) profile.certPin = certPin.trim();
+    await _persistProfiles();
+    _notify();
+  }
+
   Future<void> removeProfile(String id) async {
     _profiles.removeWhere((item) => item.id == id);
     if (_activeId == id) {
       _activeId = _profiles.isEmpty ? null : _profiles.first.id;
     }
+    await _persistProfiles();
+    _notify();
+  }
+
+  /// 设置订阅的流量总额（字节，0 表示不限）。
+  Future<void> setQuota(Profile profile, int bytes) async {
+    profile.quotaBytes = bytes < 0 ? 0 : bytes;
+    await _persistProfiles();
+    _notify();
+  }
+
+  /// 清零本地累计用量。
+  Future<void> resetUsage(Profile profile) async {
+    profile.usedBytes = 0;
     await _persistProfiles();
     _notify();
   }
@@ -152,7 +369,10 @@ class AppState extends ChangeNotifier {
     if (outbounds is! List) return const [];
     return outbounds
         .whereType<Map>()
-        .map((item) => SubscriptionNode.fromOutbound(Map<String, dynamic>.from(item)))
+        .map(
+          (item) =>
+              SubscriptionNode.fromOutbound(Map<String, dynamic>.from(item)),
+        )
         .whereType<SubscriptionNode>()
         .toList(growable: false);
   }
@@ -204,7 +424,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> connect() async {
-    if (_busy || _status == CoreStatus.connected || _status == CoreStatus.connecting) {
+    if (_busy ||
+        _status == CoreStatus.connected ||
+        _status == CoreStatus.connecting) {
       return;
     }
     final profile = activeProfile;
@@ -288,19 +510,18 @@ class AppState extends ChangeNotifier {
       _info('内核就绪：$_coreVersion');
 
       if (Platform.isAndroid) {
-        _apiLogSub = api.logs(level: _settings.logLevel).listen(
-              _appendLog,
-              onError: (Object _) {},
-            );
+        _apiLogSub = api
+            .logs(level: _settings.logLevel)
+            .listen(_appendLog, onError: (Object _) {});
       }
 
-      _trafficSub = api.traffic().listen(
-        (sample) {
-          _traffic = sample;
-          _notify();
-        },
-        onError: (Object _) {},
-      );
+      _usageTarget = profile;
+      _lastTrafficAt = DateTime.now();
+      _trafficSub = api.traffic().listen((sample) {
+        _traffic = sample;
+        _accumulateUsage(sample);
+        _notify();
+      }, onError: (Object _) {});
 
       _connectedAt = DateTime.now();
       _startTimers();
@@ -312,6 +533,24 @@ class AppState extends ChangeNotifier {
     } finally {
       _busy = false;
       _notify();
+    }
+  }
+
+  /// 把这一秒的速率折算成字节累加到订阅上；攒够 8MB 落一次盘。
+  void _accumulateUsage(TrafficSample sample) {
+    final profile = _usageTarget;
+    if (profile == null) return;
+    final now = DateTime.now();
+    final seconds = now.difference(_lastTrafficAt).inMicroseconds / 1000000.0;
+    _lastTrafficAt = now;
+    if (seconds <= 0) return;
+    final bytes = ((sample.up + sample.down) * seconds).round();
+    if (bytes <= 0) return;
+    profile.usedBytes += bytes;
+    _usageSincePersist += bytes;
+    if (_usageSincePersist >= 8 * 1024 * 1024) {
+      _usageSincePersist = 0;
+      unawaited(_persistProfiles());
     }
   }
 
@@ -409,7 +648,10 @@ class AppState extends ChangeNotifier {
   void _startTimers() {
     _pollTimer?.cancel();
     _tickTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => refreshConnections());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => refreshConnections(),
+    );
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) => _notify());
   }
 
@@ -443,6 +685,11 @@ class AppState extends ChangeNotifier {
     _connections = const [];
     _connectedAt = null;
     _coreVersion = '';
+    _usageTarget = null;
+    if (_usageSincePersist > 0) {
+      _usageSincePersist = 0;
+      unawaited(_persistProfiles());
+    }
   }
 
   void _onCoreExit(int code) {
@@ -480,12 +727,31 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _persistProfiles() async {
-    await _store.set(_kProfiles, _profiles.map((item) => item.toJson()).toList());
+    final rows = <Map<String, dynamic>>[];
+    for (final item in _profiles) {
+      final row = item.toJson();
+      row['url'] = await _seal(item.url);
+      rows.add(row);
+    }
+    await _store.set(_kProfiles, rows);
     if (_activeId == null) {
       await _store.remove(_kActive);
     } else {
       await _store.set(_kActive, _activeId);
     }
+  }
+
+  /// 敏感字段落盘前加密；拿不到系统凭据仓库时退回明文。
+  Future<String> _seal(String plain) async {
+    final vault = _vault;
+    if (vault == null || plain.isEmpty) return plain;
+    return vault.seal(plain);
+  }
+
+  Future<String> _unseal(String stored) async {
+    final vault = _vault;
+    if (vault == null || stored.isEmpty) return stored;
+    return vault.openText(stored);
   }
 
   void _notify() {

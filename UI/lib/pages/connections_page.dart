@@ -33,7 +33,10 @@ class ConnectionsPage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     '${rows.length}',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -73,7 +76,10 @@ class ConnectionsPage extends StatelessWidget {
                   ? Center(
                       child: Text(
                         state.isConnected ? '暂无活动连接' : '连接后显示活动连接',
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : RefreshIndicator(
@@ -91,28 +97,43 @@ class ConnectionsPage extends StatelessWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.language, size: 15, color: scheme.onSurfaceVariant),
+                                    Icon(
+                                      Icons.language,
+                                      size: 15,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         row.host,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: HorseBoxTheme.mono(context, size: 12.5),
+                                        style: HorseBoxTheme.mono(
+                                          context,
+                                          size: 12.5,
+                                        ),
                                       ),
                                     ),
                                     Text(
                                       formatBytes(row.total),
-                                      style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  row.chains.isEmpty ? row.rule : '${row.rule} · ${row.chains.join(' → ')}',
+                                  row.chains.isEmpty
+                                      ? row.rule
+                                      : '${row.rule} · ${row.chains.join(' → ')}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                                 ),
                               ],
                             ),

@@ -39,7 +39,10 @@ class LogsPage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     '${logs.length}',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   const Spacer(),
                   TextButton.icon(
@@ -55,7 +58,10 @@ class LogsPage extends StatelessWidget {
                   ? Center(
                       child: Text(
                         '连接后这里会显示内核日志',
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -90,7 +96,9 @@ class LogsPage extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     height: 1.45,
-                                    color: scheme.onSurface.withValues(alpha: 0.88),
+                                    color: scheme.onSurface.withValues(
+                                      alpha: 0.88,
+                                    ),
                                   ),
                                 ),
                               ),

@@ -1,6 +1,13 @@
 @echo off
 setlocal EnableExtensions
-title HorseBox 双端打包
+title HorseBox 打包
+
+rem 用法：
+rem   build-all.bat                 交互式，双端都打
+rem   build-all.bat win             只打 Windows（可跟版本号）
+rem   build-all.bat android 3.3     只打 Android，版本 3.3
+rem   build-all.bat all 3.3         双端，版本 3.3
+rem 环境变量：CLEAN=0 跳过 clean；NO_PAUSE=1 结束不暂停
 
 set "ROOT=%~dp0"
 set "UI=%ROOT%UI"
@@ -12,22 +19,43 @@ set "GRADLE_HASH=619e6l8zt76uzaekhqdol0b60"
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "FINDSTR=%SystemRoot%\System32\findstr.exe"
 
+rem ---------------------------------------------------------------- 参数
+set "TARGET=%~1"
+set "ARGVER="
+if /i "%TARGET%"=="all" goto :arg_ok
+if /i "%TARGET%"=="win" goto :arg_ok
+if /i "%TARGET%"=="android" goto :arg_ok
+rem 第一个参数不是目标平台：当成版本号，目标默认双端
+set "TARGET=all"
+set "ARGVER=%~1"
+goto :arg_done
+
+:arg_ok
+set "ARGVER=%~2"
+
+:arg_done
 echo ============================================
 echo   HorseBox 打包（Windows + Android）
 echo ============================================
+echo   目标：%TARGET%
 echo.
 
 if not exist "%FLUTTER%" (
   echo [错误] 找不到 Flutter：%FLUTTER%
   goto fail
 )
+if not exist "%ROOT%tools\nuget.exe" (
+  echo [错误] 缺少 tools\nuget.exe，WebView2 构建需要它
+  goto fail
+)
+
+if /i "%TARGET%"=="win" goto :checks_done
 
 set "JAVA_HOME=%USERPROFILE%\.jdks\jbr-21.0.11"
 if not exist "%JAVA_HOME%\bin\java.exe" (
   echo [错误] 找不到 JDK 21：%JAVA_HOME%
   goto fail
 )
-
 if not exist "%SDK%\platforms" (
   echo [错误] 找不到 Android SDK：%SDK%
   goto fail
@@ -47,15 +75,12 @@ if not exist "%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-all\%GRADLE_HASH%
   goto fail
 )
 
-if not exist "%ROOT%tools\nuget.exe" (
-  echo [ERROR] missing tools\nuget.exe, WebView2 build needs it
-  goto fail
-)
-
+:checks_done
 set "ANDROID_HOME=%SDK%"
 set "ANDROID_NDK_HOME=%SDK%\ndk\%NDK_VER%"
 set "PATH=%ROOT%tools;%JAVA_HOME%\bin;%SDK%\platform-tools;C:\Windows\System32;C:\Windows;C:\Program Files\Git\cmd;%PATH%"
 
+rem ---------------------------------------------------------------- 版本号
 set "DEFVER="
 "%FINDSTR%" /b "version:" "%UI%\pubspec.yaml" > "%TEMP%\hbver.txt" 2>nul
 for /f "tokens=2 delims=:" %%v in (%TEMP%\hbver.txt) do set "DEFVER=%%v"
@@ -63,9 +88,13 @@ del "%TEMP%\hbver.txt" >nul 2>nul
 if defined DEFVER set "DEFVER=%DEFVER: =%"
 for /f "tokens=1 delims=+" %%v in ("%DEFVER%") do set "DEFVER=%%v"
 if not defined DEFVER set "DEFVER=0.1.0"
+if exist "%ROOT%.version" set /p LASTVER=<"%ROOT%.version"
+if defined LASTVER set "DEFVER=%LASTVER%"
 
-set "VER="
-set /p "VER=输入版本号（回车默认 %DEFVER%）: "
+set "VER=%ARGVER%"
+if not defined VER (
+  set /p "VER=输入版本号（回车默认 %DEFVER%）: "
+)
 if not defined VER set "VER=%DEFVER%"
 set "BUILD=%VER:.=%"
 if defined BUILDNO set "BUILD=%BUILDNO%"
@@ -76,39 +105,37 @@ if not exist "%DIST%" mkdir "%DIST%"
 
 pushd "%UI%"
 if /i not "%CLEAN%"=="0" (
-  echo [0/4] 清理构建缓存...
+  echo [0] 清理构建缓存...
   call "%FLUTTER%" clean
   if exist "%UI%\.dart_tool" rmdir /s /q "%UI%\.dart_tool" >nul 2>nul
-  call "%FLUTTER%" pub get
-  if errorlevel 1 (
-    popd
-    goto fail
-  )
 ) else (
-  echo [0/4] 跳过清理（CLEAN=0）
-  call "%FLUTTER%" pub get
-  if errorlevel 1 (
-    popd
-    goto fail
-  )
+  echo [0] 跳过清理（CLEAN=0）
 )
-
-echo [0/4] 修补依赖插件...
-"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\patch-plugins.ps1"
+call "%FLUTTER%" pub get
 if errorlevel 1 (
-  echo [ERROR] plugin patch failed, WebView2 would skip certificate pinning
   popd
   goto fail
 )
 
-echo [1/4] 构建 Windows Release...
+echo [1] 修补依赖插件...
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\patch-plugins.ps1"
+if errorlevel 1 (
+  echo [错误] 插件修补失败，WebView2 会跳过证书指纹校验
+  popd
+  goto fail
+)
+
+rem ---------------------------------------------------------------- Windows
+if /i "%TARGET%"=="android" goto :skip_windows
+
+echo [2] 构建 Windows Release...
 call "%FLUTTER%" build windows --release --no-tree-shake-icons
 if errorlevel 1 (
   popd
   goto fail
 )
 
-echo [2/4] 打包 Windows...
+echo [3] 打包 Windows...
 call "%ROOT%windows\package.bat"
 if errorlevel 1 (
   popd
@@ -123,7 +150,11 @@ if errorlevel 1 (
   goto fail
 )
 
-echo [3/4] 构建 Android Release（arm64 + x86_64，按 ABI 分包）...
+:skip_windows
+rem ---------------------------------------------------------------- Android
+if /i "%TARGET%"=="win" goto :skip_android
+
+echo [4] 构建 Android Release（arm64 + x86_64，按 ABI 分包）...
 call "%ROOT%android\sync-libbox.bat"
 if errorlevel 1 (
   popd
@@ -135,7 +166,7 @@ if errorlevel 1 (
   goto fail
 )
 
-echo [4/4] 打包 Android...
+echo [5] 打包 Android...
 set "APK=%UI%\build\app\outputs\flutter-apk\app-arm64-v8a-release.apk"
 if not exist "%APK%" (
   echo [错误] 找不到 APK：%APK%
@@ -143,14 +174,24 @@ if not exist "%APK%" (
   goto fail
 )
 copy /y "%APK%" "%DIST%\HorseBox-%VER%-android-arm64.apk" >nul
+
+:skip_android
 popd
+
+echo %VER%> "%ROOT%.version"
 
 echo.
 echo ============================================
-echo   打包完成
+echo   打包完成（版本 %VER%）
 echo ============================================
-echo Windows: %ZIP%
-echo Android: %DIST%\HorseBox-%VER%-android-arm64.apk
+if /i not "%TARGET%"=="android" if exist "%ZIP%" (
+  echo Windows: %ZIP%
+  for %%f in ("%ZIP%") do echo           %%~zf 字节
+)
+if /i not "%TARGET%"=="win" (
+  echo Android: %DIST%\HorseBox-%VER%-android-arm64.apk
+  for %%f in ("%DIST%\HorseBox-%VER%-android-arm64.apk") do echo           %%~zf 字节
+)
 echo.
 if not defined NO_PAUSE pause
 exit /b 0

@@ -16,16 +16,16 @@ class _RuleListDialogState extends State<RuleListDialog> {
   late final List<RouteRuleSetting> _rules = [...widget.initial];
 
   String _typeLabel(String type) => switch (type) {
-        'domain_keyword' => '域名关键字',
-        'ip_cidr' => 'IP 段',
-        _ => '域名后缀',
-      };
+    'domain_keyword' => '域名关键字',
+    'ip_cidr' => 'IP 段',
+    _ => '域名后缀',
+  };
 
   String _outboundLabel(String outbound) => switch (outbound) {
-        'proxy' => '代理',
-        'reject' => '拦截',
-        _ => '直连',
-      };
+    'proxy' => '代理',
+    'reject' => '拦截',
+    _ => '直连',
+  };
 
   Future<void> _add() async {
     final rule = await showDialog<RouteRuleSetting>(
@@ -70,7 +70,10 @@ class _RuleListDialogState extends State<RuleListDialog> {
             const Divider(height: 18),
             Row(
               children: [
-                const Text('自定义规则', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '自定义规则',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: _add,
@@ -84,7 +87,10 @@ class _RuleListDialogState extends State<RuleListDialog> {
                   ? Center(
                       child: Text(
                         '还没有自定义规则',
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -100,7 +106,8 @@ class _RuleListDialogState extends State<RuleListDialog> {
                           ),
                           trailing: IconButton(
                             tooltip: '删除',
-                            onPressed: () => setState(() => _rules.removeAt(index)),
+                            onPressed: () =>
+                                setState(() => _rules.removeAt(index)),
                             icon: const Icon(Icons.delete_outline, size: 18),
                           ),
                         );
@@ -116,7 +123,8 @@ class _RuleListDialogState extends State<RuleListDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(List<RouteRuleSetting>.from(_rules)),
+          onPressed: () =>
+              Navigator.of(context).pop(List<RouteRuleSetting>.from(_rules)),
           child: const Text('保存'),
         ),
       ],
@@ -165,9 +173,8 @@ class _AddRuleDialogState extends State<AddRuleDialog> {
         return;
       }
     }
-    Navigator.of(context).pop(
-      RouteRuleSetting(type: _type, value: value, outbound: _outbound),
-    );
+    Navigator.of(context)
+        .pop(RouteRuleSetting(type: _type, value: value, outbound: _outbound));
   }
 
   @override
@@ -186,7 +193,8 @@ class _AddRuleDialogState extends State<AddRuleDialog> {
                 for (final entry in _types.entries)
                   DropdownMenuItem(value: entry.key, child: Text(entry.value)),
               ],
-              onChanged: (value) => setState(() => _type = value ?? 'domain_suffix'),
+              onChanged: (value) =>
+                  setState(() => _type = value ?? 'domain_suffix'),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -211,7 +219,8 @@ class _AddRuleDialogState extends State<AddRuleDialog> {
                 DropdownMenuItem(value: 'proxy', child: Text('走代理')),
                 DropdownMenuItem(value: 'reject', child: Text('拦截')),
               ],
-              onChanged: (value) => setState(() => _outbound = value ?? 'direct'),
+              onChanged: (value) =>
+                  setState(() => _outbound = value ?? 'direct'),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
@@ -219,7 +228,10 @@ class _AddRuleDialogState extends State<AddRuleDialog> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _error!,
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
             ],

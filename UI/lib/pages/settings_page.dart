@@ -61,7 +61,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _dnsMode = s.dnsMode;
     _strategy = s.dnsStrategy;
     _hosts = {
-      for (final entry in s.hosts.entries) entry.key: List<String>.from(entry.value),
+      for (final entry in s.hosts.entries)
+        entry.key: List<String>.from(entry.value),
     };
   }
 
@@ -116,7 +117,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _addHost() async {
@@ -131,7 +133,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _manageRules() async {
     final rules = await showDialog<List<RouteRuleSetting>>(
       context: context,
-      builder: (context) => RuleListDialog(initial: widget.state.settings.customRules),
+      builder: (context) =>
+          RuleListDialog(initial: widget.state.settings.customRules),
     );
     if (rules == null) return;
     await widget.state.updateSettings(
@@ -153,7 +156,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final current = direct ? settings.directApps : settings.proxyApps;
       final initial = direct
           ? current.toSet()
-          : (current.isEmpty ? apps.map((item) => item.package).toSet() : current.toSet());
+          : (current.isEmpty
+                ? apps.map((item) => item.package).toSet()
+                : current.toSet());
       final selected = await showDialog<Set<String>>(
         context: context,
         builder: (context) => _AppPickerDialog(
@@ -253,10 +258,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
-                FilledButton(
-                  onPressed: _save,
-                  child: const Text('保存'),
-                ),
+                FilledButton(onPressed: _save, child: const Text('保存')),
               ],
             ),
 
@@ -289,7 +291,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('TUN 模式'),
                     subtitle: Text(
-                      Platform.isAndroid ? '安卓固定开启（VpnService）' : '接管系统全部流量，需要管理员权限',
+                      Platform.isAndroid
+                          ? '安卓固定开启（VpnService）'
+                          : '接管系统全部流量，需要管理员权限',
                     ),
                     value: Platform.isAndroid ? true : _enableTun,
                     onChanged: Platform.isAndroid
@@ -303,8 +307,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: _stack == 'gvisor' ? 'gvisor' : 'mixed',
                         underline: const SizedBox.shrink(),
                         items: const [
-                          DropdownMenuItem(value: 'mixed', child: Text('mixed')),
-                          DropdownMenuItem(value: 'gvisor', child: Text('gvisor')),
+                          DropdownMenuItem(
+                            value: 'mixed',
+                            child: Text('mixed'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'gvisor',
+                            child: Text('gvisor'),
+                          ),
                         ],
                         onChanged: (v) => setState(() => _stack = v ?? 'mixed'),
                       ),
@@ -312,7 +322,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   Text(
                     'system 栈在手机和 Windows 上都不稳定，已移除；默认 mixed。',
-                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const Divider(height: 22),
                   Row(
@@ -332,7 +345,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('启用 IPv6'),
-                    subtitle: const Text('默认关闭，只用 IPv4；网络没有 IPv6 时开启会出现 network is unreachable'),
+                    subtitle: const Text(
+                      '默认关闭，只用 IPv4；网络没有 IPv6 时开启会出现 network is unreachable',
+                    ),
                     value: _enableIpv6,
                     onChanged: (v) => setState(() => _enableIpv6 = v),
                   ),
@@ -405,7 +420,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     widget.state.settings.customRules.isEmpty
                         ? '还没有自定义规则'
                         : '自定义规则 ${widget.state.settings.customRules.length} 条',
-                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -450,7 +468,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         for (final entry in _presets.entries)
                           ActionChip(
-                            label: Text(entry.key, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              entry.key,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                             onPressed: () {
                               final lines = _dnsServers.text
                                   .split(RegExp(r'[\n,]'))
@@ -459,7 +480,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   .toList();
                               if (!lines.contains(entry.value)) {
                                 lines.add(entry.value);
-                                setState(() => _dnsServers.text = lines.join('\n'));
+                                setState(
+                                  () => _dnsServers.text = lines.join('\n'),
+                                );
                               }
                             },
                           ),
@@ -473,19 +496,35 @@ class _SettingsPageState extends State<SettingsPage> {
                           value: _strategy,
                           underline: const SizedBox.shrink(),
                           items: const [
-                            DropdownMenuItem(value: 'prefer_ipv4', child: Text('prefer_ipv4')),
-                            DropdownMenuItem(value: 'prefer_ipv6', child: Text('prefer_ipv6')),
-                            DropdownMenuItem(value: 'ipv4_only', child: Text('ipv4_only')),
-                            DropdownMenuItem(value: 'ipv6_only', child: Text('ipv6_only')),
+                            DropdownMenuItem(
+                              value: 'prefer_ipv4',
+                              child: Text('prefer_ipv4'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'prefer_ipv6',
+                              child: Text('prefer_ipv6'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'ipv4_only',
+                              child: Text('ipv4_only'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'ipv6_only',
+                              child: Text('ipv6_only'),
+                            ),
                           ],
-                          onChanged: (v) => setState(() => _strategy = v ?? 'prefer_ipv4'),
+                          onChanged: (v) =>
+                              setState(() => _strategy = v ?? 'prefer_ipv4'),
                         ),
                       ],
                     ),
                   ] else
                     Text(
                       '使用面板下发的 DNS（DoH 经代理隧道）。',
-                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                 ],
               ),
@@ -503,7 +542,10 @@ class _SettingsPageState extends State<SettingsPage> {
               child: _hosts.isEmpty
                   ? Text(
                       '把域名固定解析到指定 IP，例如 nas.home → 192.168.1.10。',
-                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     )
                   : Column(
                       children: [
@@ -514,19 +556,27 @@ class _SettingsPageState extends State<SettingsPage> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(entry.key, style: HorseBoxTheme.mono(context)),
+                                      Text(
+                                        entry.key,
+                                        style: HorseBoxTheme.mono(context),
+                                      ),
                                       Text(
                                         entry.value.join(', '),
-                                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onSurfaceVariant,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                                 IconButton(
                                   tooltip: '删除',
-                                  onPressed: () => setState(() => _hosts.remove(entry.key)),
+                                  onPressed: () =>
+                                      setState(() => _hosts.remove(entry.key)),
                                   icon: const Icon(Icons.close, size: 18),
                                 ),
                               ],
@@ -568,9 +618,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         items: const [
                           DropdownMenuItem(value: 'warn', child: Text('warn')),
                           DropdownMenuItem(value: 'info', child: Text('info')),
-                          DropdownMenuItem(value: 'debug', child: Text('debug')),
+                          DropdownMenuItem(
+                            value: 'debug',
+                            child: Text('debug'),
+                          ),
                         ],
-                        onChanged: (v) => setState(() => _logLevel = v ?? 'info'),
+                        onChanged: (v) =>
+                            setState(() => _logLevel = v ?? 'info'),
                       ),
                     ],
                   ),
@@ -580,10 +634,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('启动后自动连接'),
                     subtitle: const Text('仅 Windows 生效'),
                     value: _autoConnect,
-                    onChanged: Platform.isAndroid ? null : (v) => setState(() => _autoConnect = v),
+                    onChanged: Platform.isAndroid
+                        ? null
+                        : (v) => setState(() => _autoConnect = v),
                   ),
                   const Divider(height: 22),
-                  _InfoRow(label: '内核版本', value: widget.state.coreVersion.isEmpty ? '未运行' : widget.state.coreVersion),
+                  _InfoRow(
+                    label: '内核版本',
+                    value: widget.state.coreVersion.isEmpty
+                        ? '未运行'
+                        : widget.state.coreVersion,
+                  ),
                   _InfoRow(label: '数据目录', value: widget.state.dataDir),
                 ],
               ),
@@ -639,13 +700,20 @@ class _SettingsPageState extends State<SettingsPage> {
                       runSpacing: 8,
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () => VpnChannel().openNotificationSettings(),
-                          icon: const Icon(Icons.notifications_outlined, size: 18),
+                          onPressed: () =>
+                              VpnChannel().openNotificationSettings(),
+                          icon: const Icon(
+                            Icons.notifications_outlined,
+                            size: 18,
+                          ),
                           label: const Text('通知设置'),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => VpnChannel().openBatterySettings(),
-                          icon: const Icon(Icons.battery_saver_outlined, size: 18),
+                          icon: const Icon(
+                            Icons.battery_saver_outlined,
+                            size: 18,
+                          ),
                           label: const Text('电池优化'),
                         ),
                       ],
@@ -660,11 +728,17 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('HorseBox', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    'HorseBox',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
                   Text(
                     'HorseUI 专用双端客户端 · Flutter + Dart + sing-box',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -692,7 +766,10 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 80,
-            child: Text(label, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
           ),
           Expanded(
             child: SelectableText(
@@ -755,7 +832,10 @@ class _HostDialogState extends State<_HostDialog> {
           TextField(
             controller: _domain,
             autofocus: true,
-            decoration: const InputDecoration(labelText: '域名', hintText: 'nas.home'),
+            decoration: const InputDecoration(
+              labelText: '域名',
+              hintText: 'nas.home',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -772,7 +852,10 @@ class _HostDialogState extends State<_HostDialog> {
               alignment: Alignment.centerLeft,
               child: Text(
                 _error!,
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
             ),
           ],
@@ -813,11 +896,13 @@ class _AppPickerDialogState extends State<_AppPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final query = _query.trim().toLowerCase();
-    final visible = widget.apps.where((app) {
-      if (query.isEmpty) return true;
-      return app.label.toLowerCase().contains(query) ||
-          app.package.toLowerCase().contains(query);
-    }).toList(growable: false);
+    final visible = widget.apps
+        .where((app) {
+          if (query.isEmpty) return true;
+          return app.label.toLowerCase().contains(query) ||
+              app.package.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
 
     return AlertDialog(
       title: Text(widget.title),
@@ -847,8 +932,10 @@ class _AppPickerDialogState extends State<_AppPickerDialog> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Text('已选 ${_selected.length} / ${widget.apps.length}',
-                    style: const TextStyle(fontSize: 12)),
+                Text(
+                  '已选 ${_selected.length} / ${widget.apps.length}',
+                  style: const TextStyle(fontSize: 12),
+                ),
                 const Spacer(),
                 TextButton(
                   onPressed: () => setState(() {
@@ -872,7 +959,11 @@ class _AppPickerDialogState extends State<_AppPickerDialog> {
                   return CheckboxListTile(
                     dense: true,
                     value: _selected.contains(app.package),
-                    title: Text(app.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    title: Text(
+                      app.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: Text(
                       app.package,
                       maxLines: 1,
@@ -899,7 +990,8 @@ class _AppPickerDialogState extends State<_AppPickerDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(Set<String>.from(_selected)),
+          onPressed: () =>
+              Navigator.of(context).pop(Set<String>.from(_selected)),
           child: const Text('保存'),
         ),
       ],

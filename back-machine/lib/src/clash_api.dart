@@ -20,7 +20,10 @@ class ClashApi {
     try {
       final request = await client.getUrl(_uri(path)).timeout(timeout);
       final response = await request.close().timeout(timeout);
-      final body = await response.transform(utf8.decoder).join().timeout(timeout);
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('HTTP ${response.statusCode}', uri: _uri(path));
       }
@@ -36,7 +39,10 @@ class ClashApi {
 
   /// 内核版本，同时用作就绪探测。
   Future<String> version() async {
-    final json = await _getJson('/version', timeout: const Duration(seconds: 2));
+    final json = await _getJson(
+      '/version',
+      timeout: const Duration(seconds: 2),
+    );
     return json['version'] as String? ?? 'sing-box';
   }
 
@@ -61,8 +67,9 @@ class ClashApi {
 
   /// 内核日志流：WebSocket `/logs`。
   Stream<LogEntry> logs({String level = 'info'}) async* {
-    final socket = await WebSocket.connect('ws://127.0.0.1:$port/logs?level=$level')
-        .timeout(const Duration(seconds: 5));
+    final socket = await WebSocket.connect(
+      'ws://127.0.0.1:$port/logs?level=$level',
+    ).timeout(const Duration(seconds: 5));
     try {
       await for (final message in socket) {
         final decoded = jsonDecode(message as String);
@@ -93,10 +100,12 @@ class ClashApi {
     if (proxies is! Map) return const [];
     return proxies.entries
         .where((entry) => entry.value is Map)
-        .map((entry) => <String, dynamic>{
-              'name': entry.key,
-              ...Map<String, dynamic>.from(entry.value as Map),
-            })
+        .map(
+          (entry) => <String, dynamic>{
+            'name': entry.key,
+            ...Map<String, dynamic>.from(entry.value as Map),
+          },
+        )
         .toList(growable: false);
   }
 
@@ -106,7 +115,8 @@ class ClashApi {
     String url = 'http://www.gstatic.com/generate_204',
     int timeout = 5000,
   }) async {
-    final path = '/proxies/${Uri.encodeComponent(name)}/delay'
+    final path =
+        '/proxies/${Uri.encodeComponent(name)}/delay'
         '?timeout=$timeout&url=${Uri.encodeComponent(url)}';
     final json = await _getJson(
       path,
@@ -126,7 +136,9 @@ class ClashApi {
           .timeout(const Duration(seconds: 5));
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode({'name': name}));
-      final response = await request.close().timeout(const Duration(seconds: 5));
+      final response = await request.close().timeout(
+        const Duration(seconds: 5),
+      );
       await response.drain<void>();
       if (response.statusCode != HttpStatus.noContent &&
           response.statusCode != HttpStatus.ok) {

@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../pages/connections_page.dart';
+import '../pages/credentials_page.dart';
 import '../pages/home_page.dart';
 import '../pages/logs_page.dart';
 import '../pages/panel_page.dart';
 import '../pages/profiles_page.dart';
 import '../pages/settings_page.dart';
+import '../pages/ssh_page.dart';
 import '../state/app_state.dart';
 import '../widgets/capsule_nav.dart';
 
@@ -26,26 +28,62 @@ class _HomeShellState extends State<HomeShell> {
   bool _navCollapsed = false;
 
   static const _items = <CapsuleNavItem>[
-    CapsuleNavItem(label: '首页', icon: Icons.bolt_outlined, activeIcon: Icons.bolt),
-    CapsuleNavItem(label: '订阅', icon: Icons.cloud_outlined, activeIcon: Icons.cloud),
-    CapsuleNavItem(label: '日志', icon: Icons.article_outlined, activeIcon: Icons.article),
-    CapsuleNavItem(label: '连接', icon: Icons.swap_vert_outlined, activeIcon: Icons.swap_vert),
+    CapsuleNavItem(
+      label: '首页',
+      icon: Icons.bolt_outlined,
+      activeIcon: Icons.bolt,
+    ),
+    CapsuleNavItem(
+      label: '订阅',
+      icon: Icons.cloud_outlined,
+      activeIcon: Icons.cloud,
+    ),
+    CapsuleNavItem(
+      label: '日志',
+      icon: Icons.article_outlined,
+      activeIcon: Icons.article,
+    ),
+    CapsuleNavItem(
+      label: '连接',
+      icon: Icons.swap_vert_outlined,
+      activeIcon: Icons.swap_vert,
+    ),
     CapsuleNavItem(label: '面板', icon: Icons.apps, activeIcon: Icons.apps),
-    CapsuleNavItem(label: '设置', icon: Icons.settings_outlined, activeIcon: Icons.settings),
+    CapsuleNavItem(
+      label: '配置',
+      icon: Icons.build_outlined,
+      activeIcon: Icons.build,
+    ),
+    CapsuleNavItem(
+      label: '密码本',
+      icon: Icons.vpn_key_outlined,
+      activeIcon: Icons.vpn_key,
+    ),
+    CapsuleNavItem(
+      label: '设置',
+      icon: Icons.settings_outlined,
+      activeIcon: Icons.settings,
+    ),
   ];
 
   List<Widget> get _pages => [
-        HomePage(state: widget.state, onOpenProfiles: () => setState(() => _index = 1)),
-        ProfilesPage(state: widget.state),
-        LogsPage(state: widget.state),
-        ConnectionsPage(state: widget.state),
-        PanelPage(state: widget.state),
-        SettingsPage(state: widget.state),
-      ];
+    HomePage(
+      state: widget.state,
+      onOpenProfiles: () => setState(() => _index = 1),
+    ),
+    ProfilesPage(state: widget.state),
+    LogsPage(state: widget.state),
+    ConnectionsPage(state: widget.state),
+    PanelPage(state: widget.state),
+    SshPage(state: widget.state),
+    CredentialsPage(state: widget.state),
+    SettingsPage(state: widget.state),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final desktop = !Platform.isAndroid && MediaQuery.sizeOf(context).width >= 760;
+    final desktop =
+        !Platform.isAndroid && MediaQuery.sizeOf(context).width >= 760;
     final body = IndexedStack(index: _index, children: _pages);
     if (desktop) {
       return Scaffold(
@@ -77,11 +115,14 @@ class _HomeShellState extends State<HomeShell> {
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () => setState(() => _navCollapsed = !_navCollapsed),
+                          onTap: () =>
+                              setState(() => _navCollapsed = !_navCollapsed),
                           child: Padding(
                             padding: const EdgeInsets.all(6),
                             child: Icon(
-                              _navCollapsed ? Icons.chevron_right : Icons.chevron_left,
+                              _navCollapsed
+                                  ? Icons.chevron_right
+                                  : Icons.chevron_left,
                               size: 18,
                               color: Colors.white,
                             ),
@@ -104,39 +145,19 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isPanel)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Material(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    shape: const StadiumBorder(),
-                    child: InkWell(
-                      customBorder: const StadiumBorder(),
-                      onTap: () => setState(() => _navCollapsed = !_navCollapsed),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: Icon(
-                          _navCollapsed
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          size: 18,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (!isPanel || !_navCollapsed)
-                Row(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CapsuleNav(
                       items: _items,
                       index: _index,
+                      compact: true,
                       onChanged: (value) => setState(() {
                         _index = value;
                         _navCollapsed = false;
@@ -144,7 +165,8 @@ class _HomeShellState extends State<HomeShell> {
                     ),
                   ],
                 ),
-            ],
+              ),
+            ),
           ),
         ),
       ),

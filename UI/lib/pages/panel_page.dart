@@ -1,3 +1,5 @@
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -30,6 +32,10 @@ class _PanelPageState extends State<PanelPage> {
   String? _error;
   final _addr = TextEditingController();
 
+  /// Android：默认屏蔽系统输入法，点按钮才放行（面板里点输入框/下拉不再弹键盘）。
+  InAppWebViewController? _web;
+  bool _imeArmed = false;
+
   /// 从订阅地址推导面板根地址：只保留 scheme、host、port。
   String? _panelBase(String raw) {
     final uri = Uri.tryParse(raw.trim());
@@ -58,8 +64,9 @@ class _PanelPageState extends State<PanelPage> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
-  String _pinFor(Profile profile) =>
-      profile.certPin.isNotEmpty ? profile.certPin : widget.state.settings.certPin;
+  String _pinFor(Profile profile) => profile.certPin.isNotEmpty
+      ? profile.certPin
+      : widget.state.settings.certPin;
 
   Future<void> _open(Profile profile) async {
     final base = _panelBase(profile.url);
@@ -132,7 +139,8 @@ class _PanelPageState extends State<PanelPage> {
   bool _certMatches(URLAuthenticationChallenge challenge) {
     // 首次登录的临时连接：只保证加密，不校验指纹。
     if (_temporary) return true;
-    final der = challenge.protectionSpace.sslCertificate?.x509Certificate?.encoded;
+    final der =
+        challenge.protectionSpace.sslCertificate?.x509Certificate?.encoded;
     if (der == null || der.isEmpty) return false;
     return sha256.convert(der).toString() == _pin;
   }
@@ -145,6 +153,106 @@ class _PanelPageState extends State<PanelPage> {
       _error = '面板证书指纹不匹配，连接已中止。请重新核对面板展示的 SHA-256 指纹。';
     });
   }
+
+  /// 切换「允许系统输入法」：默认关闭，面板里点输入框、下拉都不会弹键盘。
+  Future<void> _toggleIme() async {
+    setState(() => _imeArmed = !_imeArmed);
+    await _applyIme();
+  }
+
+  Future<void> _applyIme() async {
+    if (!Platform.isAndroid) return;
+    final controller = _web;
+    if (controller == null) return;
+    try {
+      await controller.evaluateJavascript(
+        source: 'window.__hbIme && window.__hbIme($_imeArmed)',
+      );
+    } catch (_) {}
+  }
+
+  /// 密码本下拉：一个面板一条记录，选中后填进当前页面的登录框。
+  Future<void> _showVault() async {
+    final items = widget.state.credentials;
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('密码本还没有记录，先到「密码本」添加')));
+      return;
+    }
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final choice = await showMenu<PanelCredential>(
+      context: context,
+      position: RelativeRect.fromLTRB(overlay.size.width - 300, 56, 12, 0),
+      items: [
+        for (final item in items)
+          PopupMenuItem<PanelCredential>(
+            value: item,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(item.username, style: const TextStyle(fontSize: 12.5)),
+                Text(
+                  item.panel,
+                  style: const TextStyle(fontSize: 10.5, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (choice != null) await _fillCredential(choice);
+  }
+
+  Future<void> _fillCredential(PanelCredential item) async {
+    final web = _web;
+    if (web == null) return;
+    try {
+      final result = await web.evaluateJavascript(
+        source: _fillScript(
+          jsonEncode(item.username),
+          jsonEncode(item.password),
+        ),
+      );
+      final filled = int.tryParse(result?.toString() ?? '') ?? 0;
+      if (!mounted) return;
+      if (filled == 0) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('没找到登录框，请先打开面板的登录页')));
+      } else if (filled == 3) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已填入账号和密码')));
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('只找到账号或密码其中一个输入框')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('填入失败：$e')));
+    }
+  }
+
+  String _fillScript(String user, String pass) =>
+      '''
+(function () {
+  function setValue(el, value) {
+    var desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+    desc.set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  var pwd = document.querySelector('input[type="password"]');
+  var usr = document.querySelector('input[name="username"], input[type="text"], input[type="email"]');
+  var flags = 0;
+  if (usr) { setValue(usr, $user); flags |= 1; }
+  if (pwd) { setValue(pwd, $pass); flags |= 2; }
+  if (usr) { usr.focus(); } else if (pwd) { pwd.focus(); }
+  return flags;
+})();
+''';
 
   void _back() {
     _exitLandscape();
@@ -176,13 +284,51 @@ class _PanelPageState extends State<PanelPage> {
     return _buildWebView();
   }
 
+  /// 同一个面板（scheme + host + port 相同）只保留一条，避免多个订阅把列表撑重复。
+  /// 优先用当前订阅；其次优先带指纹的那条，免得点进去落到临时连接。
+  List<Profile> _panelEntries(List<Profile> profiles) {
+    final ordered = [...profiles];
+    ordered.sort((a, b) {
+      final aActive = a.id == widget.state.activeId;
+      final bActive = b.id == widget.state.activeId;
+      if (aActive != bActive) return aActive ? -1 : 1;
+      final aPin = _pinFor(a).isNotEmpty;
+      final bPin = _pinFor(b).isNotEmpty;
+      if (aPin != bPin) return aPin ? -1 : 1;
+      return 0;
+    });
+    final seen = <String>{};
+    final out = <Profile>[];
+    for (final profile in ordered) {
+      final base = _panelBase(profile.url);
+      if (base == null) {
+        // 不是 HTTPS 的订阅照样列出来，点进去会提示原因。
+        out.add(profile);
+        continue;
+      }
+      if (seen.add(base)) out.add(profile);
+    }
+    return out;
+  }
+
+  /// 同一个面板下有几个订阅，显示在副标题上，避免误以为漏了配置。
+  String _panelSubtitle(Profile profile, List<Profile> profiles) {
+    final base = _panelBase(profile.url);
+    if (base == null) return profile.url;
+    final count = profiles.where((item) => _panelBase(item.url) == base).length;
+    return count > 1 ? '$base · $count 个订阅' : base;
+  }
+
   Widget _buildList() {
     final scheme = Theme.of(context).colorScheme;
     final profiles = widget.state.profiles;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 34, 20, 28),
       children: [
-        const Text('面板', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        const Text(
+          '面板',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 4),
         Text(
           '第一次使用面板：填面板地址直接连；已有订阅：点下面的订阅。',
@@ -201,7 +347,11 @@ class _PanelPageState extends State<PanelPage> {
               Text(
                 '还没有订阅时，先连一次面板建好入站。这次是临时连接，'
                 '连上后在面板里复制证书指纹，填进订阅即可。',
-                style: TextStyle(fontSize: 11.5, height: 1.5, color: scheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.5,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -234,11 +384,14 @@ class _PanelPageState extends State<PanelPage> {
             ),
           )
         else
-          for (final profile in profiles)
+          for (final profile in _panelEntries(profiles))
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: SectionCard(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 2,
+                ),
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
@@ -254,7 +407,7 @@ class _PanelPageState extends State<PanelPage> {
                     style: const TextStyle(fontSize: 13.5),
                   ),
                   subtitle: Text(
-                    _panelBase(profile.url) ?? profile.url,
+                    _panelSubtitle(profile, profiles),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: HorseBoxTheme.mono(context, size: 10.5),
@@ -288,7 +441,11 @@ class _PanelPageState extends State<PanelPage> {
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, height: 1.6, color: scheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.6,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             FilledButton.tonal(onPressed: _back, child: const Text('返回')),
@@ -304,6 +461,29 @@ class _PanelPageState extends State<PanelPage> {
         Positioned.fill(
           child: InAppWebView(
             initialUrlRequest: URLRequest(url: WebUri(_base!)),
+            initialUserScripts: UnmodifiableListView<UserScript>([
+              if (Platform.isWindows)
+                UserScript(
+                  source: _optionClickFix,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                  forMainFrameOnly: false,
+                ),
+              if (Platform.isAndroid)
+                UserScript(
+                  source: _imeScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                  forMainFrameOnly: false,
+                ),
+              if (Platform.isAndroid)
+                UserScript(
+                  source: _passwordFixScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                  forMainFrameOnly: false,
+                ),
+            ]),
+            onWebViewCreated: (controller) {
+              _web = controller;
+            },
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
               domStorageEnabled: true,
@@ -322,6 +502,17 @@ class _PanelPageState extends State<PanelPage> {
               return ServerTrustAuthResponse(
                 action: ServerTrustAuthResponseAction.CANCEL,
               );
+            },
+            onLoadStop: (controller, url) async {
+              // 用户脚本按文档注入，SPA 切页不会重跑，这里补一次。
+              if (Platform.isWindows) {
+                await controller.evaluateJavascript(source: _optionClickFix);
+              }
+              if (Platform.isAndroid) {
+                await controller.evaluateJavascript(source: _imeScript);
+                await controller.evaluateJavascript(source: _passwordFixScript);
+                await _applyIme();
+              }
             },
             onReceivedError: (controller, request, error) async {
               // Windows 侧由 WebView2 原生层拒绝，只能从加载错误里识别证书问题。
@@ -351,6 +542,49 @@ class _PanelPageState extends State<PanelPage> {
             ),
           ),
         ),
+        Positioned(
+          top: 10,
+          right: Platform.isAndroid ? 56 : 10,
+          child: SafeArea(
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.45),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _showVault,
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.vpn_key, size: 20, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (Platform.isAndroid)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: SafeArea(
+              child: Material(
+                color: _imeArmed
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : Colors.black.withValues(alpha: 0.45),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _toggleIme,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      _imeArmed ? Icons.keyboard : Icons.keyboard_hide_outlined,
+                      size: 20,
+                      color: _imeArmed ? Colors.black : Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (_temporary)
           Positioned(
             left: 12,
@@ -365,7 +599,11 @@ class _PanelPageState extends State<PanelPage> {
                   child: Text(
                     '临时连接：未校验证书指纹。登录后请在面板里复制证书 SHA-256 指纹，填进订阅。',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11.5, height: 1.4, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.4,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -375,3 +613,144 @@ class _PanelPageState extends State<PanelPage> {
     );
   }
 }
+
+/// Windows 的合成视图下，一次点击要拆成 MOVE / DOWN / UP 三条注入，
+/// 浏览器只有在按下和抬起命中同一个节点时才会生成 click，而 Element Plus 的
+/// 下拉选项正是靠 click 选中。弹层刚展开时还在做定位和滚动，两者只要错开一帧，
+/// click 就不生成 —— 表现就是“点好几次才中”。
+///
+/// 这里不再依赖 click：按下落在选项上的那一刻，直接替浏览器补发一次 click，
+/// 走的是同一个处理函数；随后浏览器若真的又生成一次 click，就吞掉，避免重复。
+const _optionClickFix = r'''
+(function () {
+  if (window.__hbOptionFix) return;
+  window.__hbOptionFix = true;
+
+  var consumed = null;
+  var consumedAt = 0;
+
+  function itemOf(node) {
+    var el = node;
+    while (el && el.nodeType === 1) {
+      if (el.classList && el.classList.contains('el-select-dropdown__item')) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  document.addEventListener('mousedown', function (event) {
+    var item = itemOf(event.target);
+    if (!item || item.classList.contains('is-disabled')) return;
+    consumed = item;
+    consumedAt = Date.now();
+    var click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0
+    });
+    click.__horsebox = true;
+    item.dispatchEvent(click);
+  }, true);
+
+  document.addEventListener('click', function (event) {
+    if (event.__horsebox) return;
+    if (!consumed) return;
+    if (Date.now() - consumedAt > 600) {
+      consumed = null;
+      return;
+    }
+    if (itemOf(event.target) !== consumed) return;
+    consumed = null;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
+})();
+''';
+
+/// Android：面板里的输入框/下拉默认不弹系统键盘。
+///
+/// Element Plus 的下拉触发器本身是 <input>，点一下就会唤起输入法，横屏下面板被键盘
+/// 遮掉大半。这里给所有可编辑元素标上 inputmode=none（浏览器不弹键盘但仍可聚焦，
+/// 下拉、开关行为不受影响）；点右上角的键盘按钮放行，键盘才会正常弹出。
+const _imeScript = r'''
+(function () {
+  if (window.__hbIme) return;
+
+  var armed = false;
+  var SELECTOR = 'input, textarea, [contenteditable="true"]';
+  var SKIP_TYPES = ['button', 'checkbox', 'radio', 'submit', 'reset', 'file',
+                    'range', 'color', 'hidden', 'image'];
+
+  function usable(el) {
+    if (!el || el.tagName !== 'INPUT') return true;
+    var type = (el.getAttribute('type') || 'text').toLowerCase();
+    return SKIP_TYPES.indexOf(type) < 0;
+  }
+
+  function apply() {
+    var list = document.querySelectorAll(SELECTOR);
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (!usable(el)) continue;
+      if (armed) {
+        if (el.__hbImeLocked) {
+          el.removeAttribute('inputmode');
+          el.__hbImeLocked = false;
+        }
+      } else if (!el.__hbImeLocked) {
+        el.setAttribute('inputmode', 'none');
+        el.__hbImeLocked = true;
+      }
+    }
+  }
+
+  window.__hbIme = function (value) {
+    armed = !!value;
+    apply();
+    return armed;
+  };
+
+  new MutationObserver(apply).observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+
+  apply();
+})();
+''';
+
+/// Android：WebView 里 type=password 的输入框会触发输入法的「安全键盘」。
+/// 把类型改成 text 再用 -webkit-text-security 画圆点，输入法看到的就是普通文本框，
+/// 界面上仍然是遮住的。
+const _passwordFixScript = r'''
+(function () {
+  if (window.__hbPwdFix) return;
+  window.__hbPwdFix = true;
+
+  function relax(el) {
+    if (!el || el.tagName !== 'INPUT') return;
+    var type = (el.getAttribute('type') || '').toLowerCase();
+    if (type !== 'password') return;
+    el.setAttribute('type', 'text');
+    el.style.webkitTextSecurity = 'disc';
+    if (!el.getAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
+  }
+
+  function scan() {
+    var list = document.querySelectorAll('input[type="password"]');
+    for (var i = 0; i < list.length; i += 1) relax(list[i]);
+  }
+
+  document.addEventListener('focusin', function (event) {
+    relax(event.target);
+  }, true);
+
+  new MutationObserver(scan).observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+
+  scan();
+})();
+''';

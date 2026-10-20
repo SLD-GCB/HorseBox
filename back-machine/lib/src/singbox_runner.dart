@@ -50,15 +50,17 @@ class SingBoxRunner {
         .transform(const LineSplitter())
         .listen(_emit);
 
-    unawaited(process.exitCode.then((code) async {
-      _emit('内核退出 code=$code');
-      if (identical(_process, process)) {
-        _process = null;
-      }
-      if (!_exits.isClosed) _exits.add(code);
-      await _cleanupSubscriptions();
-      await _removePidFile();
-    }));
+    unawaited(
+      process.exitCode.then((code) async {
+        _emit('内核退出 code=$code');
+        if (identical(_process, process)) {
+          _process = null;
+        }
+        if (!_exits.isClosed) _exits.add(code);
+        await _cleanupSubscriptions();
+        await _removePidFile();
+      }),
+    );
 
     await _writePidFile(process.pid, clashPort);
   }
@@ -78,7 +80,10 @@ class SingBoxRunner {
   }
 
   /// 清理上一轮残留的内核，只杀真正占着 Clash 端口的那个进程。
-  static Future<void> killStale({required int clashPort, required String workDir}) async {
+  static Future<void> killStale({
+    required int clashPort,
+    required String workDir,
+  }) async {
     await _killFromPidFile(clashPort, workDir);
     // 没有 pid 记录时，再按端口探测一次；能返回 sing-box 版本才认定是内核。
     if (await _probeClash(clashPort)) {
@@ -93,7 +98,10 @@ class SingBoxRunner {
       final data = jsonDecode(await file.readAsString());
       final port = (data['port'] as num?)?.toInt();
       final pid = (data['pid'] as num?)?.toInt();
-      if (pid != null && port != null && port == clashPort && await _probeClash(port)) {
+      if (pid != null &&
+          port != null &&
+          port == clashPort &&
+          await _probeClash(port)) {
         await _killPid(pid);
       }
     } catch (_) {
@@ -111,7 +119,8 @@ class SingBoxRunner {
       final result = await Process.run('netstat', ['-ano', '-p', 'tcp']);
       final lines = (result.stdout as String).split('\n');
       for (final line in lines) {
-        if (!line.contains('127.0.0.1:$clashPort') || !line.contains('LISTENING')) {
+        if (!line.contains('127.0.0.1:$clashPort') ||
+            !line.contains('LISTENING')) {
           continue;
         }
         final parts = line.trim().split(RegExp(r'\s+'));
@@ -131,12 +140,16 @@ class SingBoxRunner {
     } catch (_) {}
   }
 
-  static Future<bool> _probeClash(int port) async {    final client = HttpClient()..connectionTimeout = const Duration(milliseconds: 600);
+  static Future<bool> _probeClash(int port) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 600);
     try {
       final request = await client
           .getUrl(Uri.parse('http://127.0.0.1:$port/version'))
           .timeout(const Duration(milliseconds: 800));
-      final response = await request.close().timeout(const Duration(milliseconds: 800));
+      final response = await request.close().timeout(
+        const Duration(milliseconds: 800),
+      );
       final body = await response.transform(utf8.decoder).join();
       return response.statusCode == 200 && body.contains('sing-box');
     } catch (_) {
@@ -151,7 +164,10 @@ class SingBoxRunner {
 
   Future<void> _writePidFile(int pid, int clashPort) async {
     final file = File(p.join(workDir, 'horsebox-core.pid'));
-    await file.writeAsString(jsonEncode({'pid': pid, 'port': clashPort}), flush: true);
+    await file.writeAsString(
+      jsonEncode({'pid': pid, 'port': clashPort}),
+      flush: true,
+    );
   }
 
   Future<void> _removePidFile() async {

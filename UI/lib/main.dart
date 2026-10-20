@@ -74,9 +74,16 @@ class _StartupError extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, size: 44, color: Colors.redAccent),
+                const Icon(
+                  Icons.error_outline,
+                  size: 44,
+                  color: Colors.redAccent,
+                ),
                 const SizedBox(height: 16),
-                const Text('启动失败', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Text(
+                  '启动失败',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 10),
                 SelectableText(
                   message,

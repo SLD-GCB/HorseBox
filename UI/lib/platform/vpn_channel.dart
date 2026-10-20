@@ -59,10 +59,12 @@ class VpnChannel {
     if (raw == null) return const [];
     return raw
         .whereType<Map>()
-        .map((item) => AppEntry(
-              package: item['package'] as String? ?? '',
-              label: item['label'] as String? ?? '',
-            ))
+        .map(
+          (item) => AppEntry(
+            package: item['package'] as String? ?? '',
+            label: item['label'] as String? ?? '',
+          ),
+        )
         .where((item) => item.package.isNotEmpty)
         .toList(growable: false);
   }

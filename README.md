@@ -4,8 +4,11 @@ HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建
 
 - **Windows**：以子进程方式运行官方 `sing-box.exe`，支持 TUN 和混合端口，关闭窗口后驻留托盘。
 - **Android**：通过 `libbox` + `VpnService` 接管流量，前台通知常驻，支持分应用代理。
+- **附带工具**：内置 SSH 终端（含 SFTP 与本地端口转发）、面板登录密码本，不用再另装工具。
 
 ## 功能
+
+**代理**
 
 - **订阅拉取**：`https://面板地址/sub/<令牌>?target=singbox`
 - **证书固定**：自签面板用 SHA-256 指纹校验，每次 TLS 握手都比对，不匹配直接断开
@@ -16,21 +19,30 @@ HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建
 - **节点管理**：自动选择、手动切换、单节点测速、全部测速
 - **网络设置**：混合端口、TUN、TUN 栈（mixed / gvisor）、MTU、IPv6、局域网
 - **DNS**：沿用面板下发，或自定义 UDP / DoT / DoH
-- **内嵌面板**：在客户端里直接打开 HorseUI 面板，安卓横屏沉浸式，Windows 左侧胶囊导航
 - **其他**：hosts 映射、连接列表、实时流量、日志、深色/浅色主题、Windows 数据目录自定义
+
+**工具**
+
+- **内嵌面板**：在客户端里直接打开 HorseUI 面板，安卓横屏沉浸式，Windows 左侧胶囊导航
+- **配置（SSH）**：填 IP / 用户名 / 密码即可登录服务器，全屏终端，带 SFTP 文件传输和本地端口转发
+- **密码本**：记录面板登录账号，登录面板时一键填入，密码加密存储
+- **订阅用量**：订阅卡片显示已用 / 总额进度条，额度手填，用量由客户端本地累计
 
 ## 目录结构
 
 ```
 HorseBox/
 ├─ UI/                     Flutter 工程（Android + Windows）
-│  ├─ lib/                 界面与客户端状态
+│  ├─ lib/pages/           各功能页：首页、订阅、日志、连接、面板、配置、密码本、设置
+│  ├─ lib/ssh/             SSH 连接与端口转发
+│  ├─ lib/security/        本地密文（AES-GCM）
+│  ├─ lib/state/           客户端状态
 │  ├─ android/             Android 平台层（VpnService、libbox）
 │  ├─ windows/             Windows 平台层（窗口、托盘）
 │  ├─ assets/rules/        内置中国分流规则集
 │  └─ test/                配置补丁单元测试
 ├─ back-machine/           Dart 后端包 horsebox_backend
-│  └─ lib/src/             订阅、证书固定、面板预检、Clash API、内核进程、本地存储
+│  └─ lib/src/             订阅、证书固定、面板预检、Clash API、内核进程、本地存储、数据模型
 ├─ tools/patch-plugins.ps1 构建前修补第三方插件（见下文）
 ├─ android/sync-libbox.bat 同步 libbox.aar 到 Android 工程
 ├─ windows/package.bat     复制 Windows 内核到构建产物
@@ -43,6 +55,8 @@ HorseBox/
 - Windows 构建：Visual Studio 2022，勾选「使用 C++ 的桌面开发」
 - Android 构建：JDK 17 或 21、Android SDK、NDK `27.2.12479018`
 - 不需要安装 Go，客户端后端是纯 Dart
+
+主要依赖：`flutter_inappwebview`（内嵌面板）、`dartssh2` + `xterm`（SSH 终端）、`file_picker` + `path_provider` + `desktop_drop`（文件传输）、`cryptography`（本地加密）。
 
 ## 准备依赖
 
@@ -73,21 +87,17 @@ core/libcronet.dll
 
 ### 构建前必须先打插件补丁
 
-Windows 端的自签证书校验依赖对 `flutter_inappwebview_windows` 的源码补丁：
-插件的证书错误处理默认被注释掉，补丁会启用它，并把「放行一切」改成
-「证书 SHA-256 必须等于 `%LOCALAPPDATA%\HorseBox\panel_pin`」。
+`tools/patch-plugins.ps1` 会做三件事：
+
+1. 修正 Android 插件的 proguard 文件名（AGP 8+ 要求）
+2. 给 `flutter_inappwebview_windows` 注入证书指纹校验：把注释掉的证书错误回调启用，并把「放行一切」改成「证书 SHA-256 必须等于 `%LOCALAPPDATA%\HorseBox\panel_pin`」，校验标记 `horsebox-pin-v2`
+3. 给 `xterm` 关掉会触发输入法「安全键盘」的标记（`autocorrect` / `enableSuggestions` / `enableIMEPersonalizedLearning`），标记 `horsebox-ime-v2`
 
 ```bat
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\patch-plugins.ps1
 ```
 
-补丁脚本会：
-
-1. 修正 Android 插件的 proguard 文件名（AGP 8+ 要求）
-2. 给 Windows 插件注入指纹校验代码
-3. 校验补丁标记 `horsebox-pin-v2`，失败时返回非 0
-
-`build-all.bat` 会自动调用它；单独构建时请手动执行一次。`flutter pub get` / 升级插件后需要重新执行。
+`build-all.bat` 每次都会自动调用它；单独构建时请手动执行一次。`flutter pub get` 或升级插件后需要重新执行。
 
 ### Windows
 
@@ -151,16 +161,28 @@ set "SDK=%LOCALAPPDATA%\Android\Sdk"
 set "NDK_VER=27.2.12479018"
 ```
 
-脚本运行时会要求输入版本号，`--build-name` 使用该版本号，`--build-number` 默认是去掉点的数字。
+用法：
+
+```bat
+build-all.bat                 交互式，双端都打
+build-all.bat win             只打 Windows
+build-all.bat android 3.6     只打 Android，版本 3.6
+build-all.bat all 3.6         双端，版本 3.6
+```
+
+版本号默认取上一次打包成功后写入的 `.version`（没有则读 `pubspec.yaml`），回车直接沿用。
+`--build-name` 使用该版本号，`--build-number` 默认是去掉点的数字。
+环境变量：`CLEAN=0` 跳过 clean，`NO_PAUSE=1` 结束后不暂停，`BUILDNO=3014` 固定 versionCode。
+
 注意 `--split-per-abi` 会由 Flutter 给 versionCode 加 ABI 偏移（arm64 +2000、x86_64 +4000），
-发布到 F-Droid 前确认新包的 versionCode 大于上一版。需要固定 versionCode 时先 `set BUILDNO=3014` 再运行脚本。
+发布到 F-Droid 前确认新包的 versionCode 大于上一版。
 
 ## 使用流程
 
 ### 第一次使用：面板还没配好
 
 1. 在服务器上装好 HorseUI，终端会打印管理员密码和面板地址（`https://IP:端口`）
-2. 打开 HorseBox → 底部/左侧「面板」→「首次登录」
+2. 打开 HorseBox →「面板」→「首次登录」
 3. 填写面板地址，例如 `https://1.2.3.4:8443`，点「临时连接」
 4. 连接是 TLS 加密的，但**这次不校验证书**，页面底部会有一条橙色横幅提示
 5. 用管理员密码登录面板，建好入站和用户，复制订阅地址
@@ -207,6 +229,53 @@ set "NDK_VER=27.2.12479018"
 - 点击任意节点可手动切换，当前连接会立即生效
 - 节点右侧「测速」显示延迟，顶部「全部测速」批量检测
 
+### 订阅用量
+
+订阅卡片上有一条进度条，显示「已用 / 总额」：
+
+- **总额**手填（添加或编辑订阅时填写，0 或留空表示不限）；
+- **已用**由客户端本地累计：连接期间按内核上报的速率做时间积分，累加到当前订阅，每 8MB 或断开时落盘；
+- 超过 75% 变琥珀色，90% 变红；点这一行可以改额度或清零。
+
+注意这是**本机口径**，只统计经这台设备转发的流量，和面板后台的数字会有出入。真正的配额限制在面板侧：超出配额后 `/sub` 直接返回 403。
+
+### 配置：SSH 终端
+
+胶囊栏「配置」：
+
+1. 「添加主机」填 IP / 用户名 / 端口（默认 22）/ 密码，备注名可选；
+2. 点主机进入全屏终端，顶栏是返回、状态、端口转发、文件传输、重连；
+3. 首次连接会记录主机密钥 SHA-256，之后每次比对，不一致直接拒绝；确认换过机器后可在主机菜单里「重置主机指纹」；
+4. Android 底部有一行功能键：esc / tab / ^C / ^D / ^Z / 方向键 / `~` `/` `-` `|`。
+
+终端里：
+
+- **Windows**：左键拖拽选中文字，右键出菜单（复制 / 复制全部 / 粘贴 / 取消选中）；
+- **Android**：长按选中手指下的词并弹出同样的菜单。
+
+### 文件传输（SFTP）
+
+终端顶栏的文件夹按钮进入 SFTP：
+
+- 浏览远端目录，目录在前，显示文件大小；
+- 文件右侧「下载」→ 保存到本地（Windows：`下载\HorseBox`；Android：`Android/data/com.horseui.horsebox/files/HorseBox`）；
+- 右上「上传」→ 系统文件选择器，传到当前目录；
+- Windows 上可以把文件直接拖进窗口，松手即上传到当前目录。
+
+### 端口转发
+
+终端顶栏的左右箭头按钮：
+
+- 规则是「本地端口 → 目标主机:目标端口」，只绑定 `127.0.0.1`；
+- 开关即时生效，只在当前连接期间有效，可看到每条规则的当前连接数；
+- 规则跟着主机保存，重连后手动打开即可。
+
+### 密码本
+
+胶囊栏「密码本」：一个面板一条记录（面板地址 + 用户名 + 密码），面板地址归一化为 `host:port` 做去重，同一个面板不能重复添加。
+
+在「面板」页右上角点钥匙按钮，下拉选一条记录，账号和密码会直接填进当前登录页的输入框（触发 `input`/`change`，Vue 的 v-model 能收到）。
+
 ## 证书与安全
 
 客户端只信任一张证书：面板的 SHA-256 指纹。
@@ -221,6 +290,14 @@ set "NDK_VER=27.2.12479018"
 换证书（重新生成自签 / 换成 ACME）后，旧指纹会立刻失效，需要重新复制。
 
 > 说明：这套固定只覆盖自签证书。如果面板改用公网 CA 证书，WebView 层不会触发校验回调（证书链本身合法），此时保护来自 CA 体系而不是指纹。
+
+### 本地数据加密
+
+订阅地址（含令牌）和密码本里的密码，落盘前都用 AES-256-GCM 加密，`settings.json` 里只有 `enc1:` 开头的密文。
+
+密钥是首次启动随机生成的 32 字节，写在数据目录的 `secret.key`：Android 在应用私有目录，Windows 在 `%LOCALAPPDATA%\HorseBox`。它能挡住「直接打开配置文件看明文」，但挡不住已经拿到你系统账号权限的人——那种场景需要系统级凭据仓库。
+
+旧版本的明文数据会在下次保存时自动转成密文；换机或删掉 `secret.key` 后旧密文无法解开，需要重新填。
 
 ## 常见问题
 
@@ -240,6 +317,10 @@ TUN 需要管理员权限，右键以管理员身份运行。
 
 部分应用会绕过 VPN（如自带网络栈的系统组件）。可以尝试关闭该应用的「私密 DNS」，或把它加入「代理应用」。
 
+**终端里打不出字**
+
+桌面端走硬件按键，Android 走系统输入法；两边都不使用内置键盘。如果 Android 弹出的是输入法的「安全键盘」，那是输入法自己的策略（部分机型的非系统应用会被强制），可以在输入法设置里关掉。
+
 **构建时报 `certificate pinning patch missing`**
 
 没有执行 `tools\patch-plugins.ps1`，或 `flutter pub get` 后插件被还原。重新执行补丁脚本再构建。
@@ -256,6 +337,8 @@ WebView2 的 C++ 依赖用 nuget 还原，把 `nuget.exe` 放到 `tools\` 下（
 - 国内分流依赖内置规则集，HTTPDNS、IP 直连等绕过域名的流量可能仍走代理
 - 仓库不包含 `libbox.aar`、`sing-box.exe`、`libcronet.dll`，需要自行准备
 - 面板若改用公网 CA 证书，WebView 层不再做指纹校验
+- SSH 只支持密码登录（不支持私钥），端口转发只有本地转发（`ssh -L`），没有远程转发和动态 SOCKS
+- SFTP 是逐个文件收发，没有断点续传和目录上传
 
 ## 许可证
 

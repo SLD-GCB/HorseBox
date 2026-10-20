@@ -46,7 +46,10 @@ class PanelClient {
       path: '/api/ping',
     );
 
-    final client = pinned.createPinnedHttpClient(pin, connectionTimeout: timeout);
+    final client = pinned.createPinnedHttpClient(
+      pin,
+      connectionTimeout: timeout,
+    );
 
     try {
       final request = await client.getUrl(ping).timeout(timeout);
@@ -119,8 +122,10 @@ class PanelClient {
     var base = Platform.environment['LOCALAPPDATA'] ?? '';
     if (base.isEmpty) base = Platform.environment['TEMP'] ?? '';
     if (base.isEmpty) return null;
-    return File('$base${Platform.pathSeparator}HorseBox'
-        '${Platform.pathSeparator}panel_pin');
+    return File(
+      '$base${Platform.pathSeparator}HorseBox'
+      '${Platform.pathSeparator}panel_pin',
+    );
   }
 
   /// 写入当前面板的指纹；写失败时返回 false，面板将无法通过 WebView 校验。
@@ -132,7 +137,8 @@ class PanelClient {
 
   /// 首次登录的临时连接：告诉 WebView2 「这次不校验指纹」。
   /// 只在没有指纹时使用，离开面板会立刻删除。
-  static Future<bool> publishWindowsTemporary() => _writeWindowsPin('temporary');
+  static Future<bool> publishWindowsTemporary() =>
+      _writeWindowsPin('temporary');
 
   static Future<bool> _writeWindowsPin(String value) async {
     final file = _windowsPinFile();

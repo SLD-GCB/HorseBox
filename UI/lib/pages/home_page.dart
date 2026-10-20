@@ -6,7 +6,11 @@ import '../widgets/section.dart';
 
 /// 首页：连接开关、实时速率、当前订阅。
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, required this.state, required this.onOpenProfiles});
+  const HomePage({
+    super.key,
+    required this.state,
+    required this.onOpenProfiles,
+  });
 
   final AppState state;
   final VoidCallback onOpenProfiles;
@@ -31,7 +35,10 @@ class HomePage extends StatelessWidget {
                 const Spacer(),
                 if (state.coreVersion.isNotEmpty)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: scheme.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
@@ -62,7 +69,8 @@ class HomePage extends StatelessWidget {
                 switch (state.status) {
                   CoreStatus.idle => '未连接',
                   CoreStatus.connecting => '正在连接…',
-                  CoreStatus.connected => '已连接 · ${formatDuration(state.uptime)}',
+                  CoreStatus.connected =>
+                    '已连接 · ${formatDuration(state.uptime)}',
                   CoreStatus.stopping => '正在断开…',
                   CoreStatus.error => '连接失败',
                 },
@@ -100,11 +108,18 @@ class HomePage extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.dns_outlined, size: 18, color: scheme.onSurfaceVariant),
+                      Icon(
+                        Icons.dns_outlined,
+                        size: 18,
+                        color: scheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         '当前订阅',
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                       const Spacer(),
                       TextButton(
@@ -116,20 +131,29 @@ class HomePage extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     state.activeProfile?.name ?? '还没有添加订阅',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     state.activeProfile?.url ?? '从面板「用户 → 链接」复制 sing-box 订阅地址',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   if (state.activeProfile != null) ...[
                     const Divider(height: 24),
                     Row(
                       children: [
-                        _MetaChip(label: '混合端口', value: '${state.settings.mixedPort}'),
+                        _MetaChip(
+                          label: '混合端口',
+                          value: '${state.settings.mixedPort}',
+                        ),
                         const SizedBox(width: 8),
                         _MetaChip(
                           label: 'TUN',
@@ -150,11 +174,22 @@ class HomePage extends StatelessWidget {
               _ErrorCard(message: state.error!),
             ],
             const SizedBox(height: 18),
-            SectionLabel('提示', trailing: Icon(Icons.lightbulb_outline, size: 14, color: scheme.onSurfaceVariant)),
+            SectionLabel(
+              '提示',
+              trailing: Icon(
+                Icons.lightbulb_outline,
+                size: 14,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
             Text(
               '连接后所有应用的流量会进入 sing-box。电脑端首次使用 TUN 需要管理员权限；'
               '如果只是浏览器走代理，可以关闭 TUN，改用混合端口 ${state.settings.mixedPort}。',
-              style: TextStyle(fontSize: 12, height: 1.5, color: scheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
           ],
         );
@@ -207,15 +242,25 @@ class _ConnectButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 3, color: fg),
               )
             else
-              Icon(connected ? Icons.power_settings_new : Icons.power_settings_new_outlined, size: 42, color: fg),
+              Icon(
+                connected
+                    ? Icons.power_settings_new
+                    : Icons.power_settings_new_outlined,
+                size: 42,
+                color: fg,
+              ),
             const SizedBox(height: 10),
             Text(
               connecting
                   ? '连接中'
                   : connected
-                      ? '断开'
-                      : '连接',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: fg),
+                  ? '断开'
+                  : '连接',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
             ),
           ],
         ),
@@ -270,7 +315,11 @@ class _ErrorCard extends StatelessWidget {
           Expanded(
             child: SelectableText(
               message,
-              style: TextStyle(fontSize: 12, height: 1.5, color: scheme.onErrorContainer),
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: scheme.onErrorContainer,
+              ),
             ),
           ),
         ],

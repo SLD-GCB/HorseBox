@@ -27,10 +27,9 @@ class SubscriptionClient {
       throw SubscriptionException('订阅地址不合法');
     }
     if (uri.queryParameters.containsKey('target')) return uri;
-    return uri.replace(queryParameters: {
-      ...uri.queryParameters,
-      'target': 'singbox',
-    });
+    return uri.replace(
+      queryParameters: {...uri.queryParameters, 'target': 'singbox'},
+    );
   }
 
   static String normalizePin(String pin) => pinned.normalizePin(pin);
@@ -74,7 +73,10 @@ class SubscriptionClient {
         });
       }
 
-      final body = await response.transform(utf8.decoder).join().timeout(timeout);
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(timeout);
       final decoded = jsonDecode(body);
       if (decoded is! Map<String, dynamic>) {
         throw SubscriptionException('订阅返回的不是 sing-box 配置');

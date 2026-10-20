@@ -38,23 +38,24 @@ HttpClient createPinnedHttpClient(
   }
 
   client.connectionFactory = (uri, proxyHost, proxyPort) async {
-    final Future<Socket> socket = SecureSocket.connect(
-      uri.host,
-      uri.port,
-      onBadCertificate: (_) => true,
-      timeout: connectionTimeout,
-    ).then<Socket>((secure) {
-      final cert = secure.peerCertificate;
-      if (cert == null) {
-        secure.destroy();
-        throw HandshakeException('对端没有提供证书');
-      }
-      if (sha256.convert(cert.der).toString() != pin) {
-        secure.destroy();
-        throw HandshakeException('证书指纹不一致');
-      }
-      return secure;
-    });
+    final Future<Socket> socket =
+        SecureSocket.connect(
+          uri.host,
+          uri.port,
+          onBadCertificate: (_) => true,
+          timeout: connectionTimeout,
+        ).then<Socket>((secure) {
+          final cert = secure.peerCertificate;
+          if (cert == null) {
+            secure.destroy();
+            throw HandshakeException('对端没有提供证书');
+          }
+          if (sha256.convert(cert.der).toString() != pin) {
+            secure.destroy();
+            throw HandshakeException('证书指纹不一致');
+          }
+          return secure;
+        });
     return ConnectionTask.fromSocket(socket, () {});
   };
 

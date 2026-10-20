@@ -22,7 +22,9 @@ class HorseBoxTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: dark ? const Color(0xFF141C18) : scheme.surfaceContainerHighest,
+        fillColor: dark
+            ? const Color(0xFF141C18)
+            : scheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,

@@ -62,10 +62,7 @@ String patchClientConfig(String raw, ClientConfigOptions opts) {
   }
   final root = Map<String, dynamic>.from(decoded);
 
-  root['log'] = <String, dynamic>{
-    'level': opts.logLevel,
-    'timestamp': true,
-  };
+  root['log'] = <String, dynamic>{'level': opts.logLevel, 'timestamp': true};
 
   final experimental = _asMap(root['experimental']);
   experimental['clash_api'] = <String, dynamic>{
@@ -149,7 +146,9 @@ void _applyProxySelection(Map<String, dynamic> root, String selected) {
 
   final tags = nodes.map((item) => item['tag']).whereType<String>().toList();
   // 节点名和组名冲突时保持原配置，避免生成重复 tag 的非法配置。
-  if (tags.length != nodes.length || tags.contains('auto') || tags.contains('proxy')) {
+  if (tags.length != nodes.length ||
+      tags.contains('auto') ||
+      tags.contains('proxy')) {
     return;
   }
 
@@ -178,7 +177,11 @@ void _patchDns(Map<String, dynamic> root, ClientConfigOptions opts) {
   final servers = _asList(dns['servers'])
       .whereType<Map>()
       .map((item) => Map<String, dynamic>.from(item))
-      .where((item) => item['tag'] != 'horsebox-hosts' && !('${item['tag']}'.startsWith('horsebox-dns-')))
+      .where(
+        (item) =>
+            item['tag'] != 'horsebox-hosts' &&
+            !('${item['tag']}'.startsWith('horsebox-dns-')),
+      )
       .toList();
 
   final rules = _asList(dns['rules'])
@@ -229,9 +232,15 @@ void _patchDns(Map<String, dynamic> root, ClientConfigOptions opts) {
       if (anchor is String && anchor.isNotEmpty && anchor != cnTag) {
         final cnRules = <Map<String, dynamic>>[];
         if (opts.rulesDir.isNotEmpty) {
-          cnRules.add({'rule_set': ['geosite-cn'], 'server': cnTag});
+          cnRules.add({
+            'rule_set': ['geosite-cn'],
+            'server': cnTag,
+          });
         }
-        cnRules.add({'domain_suffix': ['.cn'], 'server': cnTag});
+        cnRules.add({
+          'domain_suffix': ['.cn'],
+          'server': cnTag,
+        });
         rules.insertAll(0, cnRules);
         dns['final'] = anchor;
       } else {
@@ -247,9 +256,15 @@ void _patchDns(Map<String, dynamic> root, ClientConfigOptions opts) {
     if (hasDirect) {
       final cnRules = <Map<String, dynamic>>[];
       if (opts.rulesDir.isNotEmpty) {
-        cnRules.add({'rule_set': ['geosite-cn'], 'server': 'dns-direct'});
+        cnRules.add({
+          'rule_set': ['geosite-cn'],
+          'server': 'dns-direct',
+        });
       }
-      cnRules.add({'domain_suffix': ['.cn'], 'server': 'dns-direct'});
+      cnRules.add({
+        'domain_suffix': ['.cn'],
+        'server': 'dns-direct',
+      });
       rules.insertAll(0, cnRules);
     }
   }
@@ -269,7 +284,6 @@ void _dropIpv6Address(Map<String, dynamic> tun) {
       .where((item) => !item.contains(':'))
       .toList(growable: false);
 }
-
 
 Map<String, dynamic>? _serverFromUri(String input, int index) {
   final raw = normalizeDnsServer(input);
@@ -331,7 +345,6 @@ extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
-
 void _applyRouteRules(Map<String, dynamic> root, ClientConfigOptions opts) {
   final route = _asMap(root['route']);
   final existing = _asList(route['rules'])
@@ -379,19 +392,29 @@ void _applyRouteRules(Map<String, dynamic> root, ClientConfigOptions opts) {
       'format': 'binary',
       'path': p.join(opts.rulesDir, 'geoip-cn.srs'),
     });
-    cnRules.add({'rule_set': ['geosite-cn'], 'outbound': 'direct'});
-    cnRules.add({'rule_set': ['geoip-cn'], 'outbound': 'direct'});
+    cnRules.add({
+      'rule_set': ['geosite-cn'],
+      'outbound': 'direct',
+    });
+    cnRules.add({
+      'rule_set': ['geoip-cn'],
+      'outbound': 'direct',
+    });
   }
 
   final priority = existing
-      .where((item) => item['action'] == 'sniff' || item['action'] == 'hijack-dns')
+      .where(
+        (item) => item['action'] == 'sniff' || item['action'] == 'hijack-dns',
+      )
       .toList();
   if (opts.dnsCnDirect) {
     // sing-box 1.12+ 不再自动解析域名；没有 resolve，geoip-cn 对域名目标不生效。
     priority.add({'action': 'resolve', 'strategy': 'prefer_ipv4'});
   }
   final rest = existing
-      .where((item) => item['action'] != 'sniff' && item['action'] != 'hijack-dns')
+      .where(
+        (item) => item['action'] != 'sniff' && item['action'] != 'hijack-dns',
+      )
       .toList();
   // Google 的下载重定向域名（redirector.gvt1.com 等）会被 geosite-cn 误判为
   // 国内域名，导致 Play 下载走直连超时；这里强制走代理覆盖内置规则。
@@ -438,7 +461,6 @@ void _applyRouteRules(Map<String, dynamic> root, ClientConfigOptions opts) {
   if (ruleSets.isNotEmpty) route['rule_set'] = ruleSets;
   root['route'] = route;
 }
-
 
 /// 自定义 DNS 需要一个“非空”的 direct 出站，否则 sing-box 会拒绝
 /// `detour` 到空 direct（detour to an empty direct outbound makes no sense）。
