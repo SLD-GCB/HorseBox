@@ -235,6 +235,8 @@ class _PanelPageState extends State<PanelPage> {
     }
   }
 
+  // 注意：安卓上 _passwordFixScript 会把 type=password 改成 text 并画上圆点，
+  // 所以这里不能再按 type=password 找密码框，否则永远只填得上账号。
   String _fillScript(String user, String pass) =>
       '''
 (function () {
@@ -244,15 +246,41 @@ class _PanelPageState extends State<PanelPage> {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
-  var pwd = document.querySelector('input[type="password"]');
-  var usr = document.querySelector('input[name="username"], input[type="text"], input[type="email"]');
+  function isMasked(el) {
+    if (el.getAttribute('data-hb-pwd') === '1') return true;
+    var style = window.getComputedStyle(el);
+    var mask = style.webkitTextSecurity;
+    return !!mask && mask !== 'none';
+  }
+  function looksSecret(el) {
+    var hint = (el.getAttribute('name') || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('placeholder') || '');
+    hint = hint.toLowerCase();
+    return hint.indexOf('pass') >= 0 || hint.indexOf('pwd') >= 0 || hint.indexOf('密码') >= 0;
+  }
+  var all = document.querySelectorAll('input');
+  var pwd = null;
+  var usr = null;
+  for (var i = 0; i < all.length; i += 1) {
+    var el = all[i];
+    if (el.disabled) continue;
+    var type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'hidden' || type === 'checkbox' || type === 'radio' || type === 'submit' ||
+        type === 'button' || type === 'file' || type === 'search') continue;
+    if (!pwd && (type === 'password' || isMasked(el))) { pwd = el; continue; }
+    if (usr) continue;
+    if (looksSecret(el)) { if (!pwd) pwd = el; continue; }
+    usr = el;
+  }
+  // 没有密码框说明当前不是登录页（仪表盘、用户管理这些页面也有输入框），
+  // 这时宁可不填，也不要把账号打进搜索框里。
+  if (!pwd) return 0;
   var flags = 0;
   if (usr) { setValue(usr, $user); flags |= 1; }
   if (pwd) { setValue(pwd, $pass); flags |= 2; }
   if (usr) { usr.focus(); } else if (pwd) { pwd.focus(); }
   return flags;
 })();
-''';
+      ''';
 
   void _back() {
     _exitLandscape();
@@ -723,17 +751,20 @@ const _imeScript = r'''
 /// Android：WebView 里 type=password 的输入框会触发输入法的「安全键盘」。
 /// 把类型改成 text 再用 -webkit-text-security 画圆点，输入法看到的就是普通文本框，
 /// 界面上仍然是遮住的。
-const _passwordFixScript = r'''
+const _passwordFixScript = r"""
 (function () {
   if (window.__hbPwdFix) return;
-  window.__hbPwdFix = true;
+
+  var MASK = 'disc';
 
   function relax(el) {
     if (!el || el.tagName !== 'INPUT') return;
     var type = (el.getAttribute('type') || '').toLowerCase();
     if (type !== 'password') return;
+    try { el.type = 'text'; } catch (e) {}
     el.setAttribute('type', 'text');
-    el.style.webkitTextSecurity = 'disc';
+    el.setAttribute('data-hb-pwd', '1');
+    el.style.webkitTextSecurity = MASK;
     if (!el.getAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
   }
 
@@ -742,15 +773,53 @@ const _passwordFixScript = r'''
     for (var i = 0; i < list.length; i += 1) relax(list[i]);
   }
 
-  document.addEventListener('focusin', function (event) {
-    relax(event.target);
-  }, true);
+  // 1) 属性级拦截。Vue 每次 patch 都会执行 el.type = 'password'，在 setter 里
+  //    直接换成 text：输入法在聚焦那一刻读到的就已经是 text，不存在时间差。
+  try {
+    var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
+    var desc = proto && Object.getOwnPropertyDescriptor(proto, 'type');
+    if (desc && desc.set && desc.get && !proto.__hbTypeTrap) {
+      Object.defineProperty(proto, 'type', {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (value) {
+          if (String(value).toLowerCase() === 'password') {
+            desc.set.call(this, 'text');
+            try {
+              this.setAttribute('data-hb-pwd', '1');
+              this.style.webkitTextSecurity = MASK;
+            } catch (e) {}
+            return;
+          }
+          desc.set.call(this, value);
+        }
+      });
+      proto.__hbTypeTrap = true;
+    }
+  } catch (e) {}
 
-  new MutationObserver(scan).observe(document.documentElement, {
+  // 2) 手指按下就转换，早于 focus，也就早于输入法建立会话。
+  function onDown(event) { relax(event.target); }
+  document.addEventListener('pointerdown', onDown, true);
+  document.addEventListener('touchstart', onDown, true);
+  document.addEventListener('mousedown', onDown, true);
+
+  // 3) 兜底：节点插入，以及 type 被别的途径写回。
+  new MutationObserver(function (records) {
+    for (var i = 0; i < records.length; i += 1) {
+      var record = records[i];
+      if (record.type === 'attributes') relax(record.target);
+      else scan();
+    }
+  }).observe(document.documentElement, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['type']
   });
 
   scan();
+  window.__hbPwdFix = true;
 })();
-''';
+""";

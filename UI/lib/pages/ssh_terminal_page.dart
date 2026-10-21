@@ -39,6 +39,11 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   Timer? _longPress;
   bool _menuOpen = false;
 
+  /// Android 的选区光标：base/extent 是两端的单元格坐标，拖动时改写其中一个。
+  CellOffset? _selBase;
+  CellOffset? _selExtent;
+  bool _selectionActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -179,7 +184,15 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
           children: [
             _topBar(scheme),
             if (_error != null) _errorBar(scheme),
-            Expanded(child: _terminalArea()),
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _terminalArea()),
+                  if (Platform.isAndroid)
+                    Positioned.fill(child: _selectionLayer()),
+                ],
+              ),
+            ),
             if (Platform.isAndroid) _keyBar(),
           ],
         ),
@@ -219,22 +232,23 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
       return;
     }
     if (event.kind != PointerDeviceKind.touch) return;
-    // 手机：长按选中手指下面那个词，再出菜单。
-    final position = event.position;
+    // 已经有选区时，点空白处先取消，避免光标一直挂在屏幕上。
+    if (_selectionActive) {
+      _clearSelection();
+      return;
+    }
+    // 手机：长按选中手指下面那个词，然后出现两端可拖动的光标。
     final local = event.localPosition;
     _longPress?.cancel();
     _longPress = Timer(const Duration(milliseconds: 450), () {
-      unawaited(_openMenu(position, selectAt: local));
+      _startSelection(local);
     });
   }
 
-  Future<void> _openMenu(Offset global, {Offset? selectAt}) async {
+  Future<void> _openMenu(Offset global) async {
     if (_menuOpen) return;
     _menuOpen = true;
     try {
-      if (selectAt != null) {
-        _viewKey.currentState?.renderTerminal.selectWord(selectAt);
-      }
       final overlay =
           Overlay.of(context).context.findRenderObject() as RenderBox?;
       if (overlay == null) return;
@@ -285,6 +299,199 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
     } finally {
       _menuOpen = false;
     }
+  }
+
+  /// 长按起始：选中手指下的词，然后把两端光标交给用户拖。
+  void _startSelection(Offset local) {
+    final view = _viewKey.currentState;
+    if (view == null) return;
+    final cell = view.renderTerminal.getCellOffset(local);
+    final word = _terminal.buffer.getWordBoundary(cell);
+    final begin = word?.begin ?? cell;
+    final end = word?.end ?? CellOffset(cell.x + 1, cell.y);
+    // 先把键盘收起来，不然光标和工具条会被挡在下半屏。
+    _focus.unfocus();
+    setState(() {
+      _selBase = begin;
+      _selExtent = end;
+      _selectionActive = true;
+    });
+    _terminalController.setSelection(
+      _terminal.buffer.createAnchorFromOffset(begin),
+      _terminal.buffer.createAnchorFromOffset(end),
+      mode: SelectionMode.line,
+    );
+  }
+
+  /// 拖动某一端光标：把手指位置换算成单元格，重设选区。
+  void _moveHandle(bool isStart, Offset global) {
+    final view = _viewKey.currentState;
+    final box = _viewKey.currentContext?.findRenderObject() as RenderBox?;
+    if (view == null || box == null) return;
+    final cell = view.renderTerminal.getCellOffset(box.globalToLocal(global));
+    final base = isStart ? cell : _selBase;
+    final extent = isStart ? _selExtent : cell;
+    if (base == null || extent == null) return;
+    setState(() {
+      _selBase = base;
+      _selExtent = extent;
+    });
+    _terminalController.setSelection(
+      _terminal.buffer.createAnchorFromOffset(base),
+      _terminal.buffer.createAnchorFromOffset(extent),
+      mode: SelectionMode.line,
+    );
+  }
+
+  void _clearSelection() {
+    _terminalController.clearSelection();
+    setState(() {
+      _selBase = null;
+      _selExtent = null;
+      _selectionActive = false;
+    });
+  }
+
+  Future<void> _copySelection() async {
+    final selection = _terminalController.selection;
+    final text = selection == null ? '' : _terminal.buffer.getText(selection);
+    if (text.isEmpty) {
+      _toast('没有选中内容');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    _toast('已复制');
+  }
+
+  Future<void> _pasteClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text ?? '';
+    if (text.isEmpty) return;
+    _terminal.paste(text);
+    _clearSelection();
+    _focus.requestFocus();
+  }
+
+  /// 选区两端的圆形光标 + 悬浮工具条，只在安卓长按后出现。
+  Widget _selectionLayer() {
+    return IgnorePointer(
+      ignoring: !_selectionActive,
+      child: AnimatedBuilder(
+        animation: _terminalController,
+        builder: (context, _) {
+          final base = _selBase;
+          final extent = _selExtent;
+          final view = _viewKey.currentState;
+          if (!_selectionActive || base == null || extent == null) {
+            return const SizedBox.shrink();
+          }
+          if (view == null) return const SizedBox.shrink();
+          final render = view.renderTerminal;
+          final lineHeight = render.lineHeight;
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              Offset point(CellOffset cell) {
+                final offset = render.getOffset(cell);
+                return Offset(
+                  offset.dx.clamp(4.0, constraints.maxWidth - 20),
+                  offset.dy.clamp(0.0, constraints.maxHeight - 20),
+                );
+              }
+
+              final basePoint = point(base);
+              final extentPoint = point(extent);
+              final upper = basePoint.dy <= extentPoint.dy
+                  ? basePoint
+                  : extentPoint;
+              final lower = basePoint.dy <= extentPoint.dy
+                  ? extentPoint
+                  : basePoint;
+              final above = upper.dy > 52;
+              return Stack(
+                children: [
+                  _handleDot(basePoint, isStart: true),
+                  _handleDot(
+                    extentPoint,
+                    isStart: false,
+                    lineHeight: lineHeight,
+                  ),
+                  Positioned(
+                    left: (upper.dx - 76).clamp(
+                      4.0,
+                      constraints.maxWidth - 196,
+                    ),
+                    top: above ? upper.dy - 46 : lower.dy + lineHeight + 8,
+                    child: _selectionToolbar(),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _handleDot(
+    Offset at, {
+    required bool isStart,
+    double lineHeight = 16,
+  }) {
+    return Positioned(
+      left: at.dx - 10,
+      top: isStart ? at.dy - 20 : at.dy + lineHeight + 2,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) => _moveHandle(isStart, details.globalPosition),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: Center(
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _selectionToolbar() {
+    return Material(
+      color: const Color(0xFF2D2D30),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _toolbarButton('复制', _copySelection),
+            _toolbarButton('粘贴', _pasteClipboard),
+            _toolbarButton('取消', _clearSelection),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _toolbarButton(String label, VoidCallback onTap) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 34),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        foregroundColor: Colors.white,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
+    );
   }
 
   void _toast(String message) {
