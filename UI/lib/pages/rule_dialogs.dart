@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:horsebox_backend/horsebox_backend.dart';
 
+import '../widgets/password_keyboard.dart';
+
 class RuleListDialog extends StatefulWidget {
   const RuleListDialog({super.key, required this.initial});
 
@@ -197,17 +199,14 @@ class _AddRuleDialogState extends State<AddRuleDialog> {
                   setState(() => _type = value ?? 'domain_suffix'),
             ),
             const SizedBox(height: 12),
-            TextField(
+            KeyField(
               controller: _value,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: '内容',
-                hintText: switch (_type) {
-                  'ip_cidr' => '例如 1.2.3.0/24',
-                  'domain_keyword' => '例如 bilibili',
-                  _ => '例如 example.com',
-                },
-              ),
+              label: '内容',
+              hint: switch (_type) {
+                'ip_cidr' => '例如 1.2.3.0/24',
+                'domain_keyword' => '例如 bilibili',
+                _ => '例如 example.com',
+              },
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),

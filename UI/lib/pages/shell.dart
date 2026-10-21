@@ -10,6 +10,7 @@ import '../pages/panel_page.dart';
 import '../pages/profiles_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/ssh_page.dart';
+import '../widgets/password_keyboard.dart';
 import '../state/app_state.dart';
 import '../widgets/capsule_nav.dart';
 
@@ -105,6 +106,8 @@ class _HomeShellState extends State<HomeShell> {
                           index: _index,
                           onChanged: (value) => setState(() {
                             _index = value;
+
+                            PasswordKeyboard.hide();
                             _navCollapsed = false;
                           }),
                           axis: Axis.vertical,
@@ -160,6 +163,8 @@ class _HomeShellState extends State<HomeShell> {
                       compact: true,
                       onChanged: (value) => setState(() {
                         _index = value;
+
+                        PasswordKeyboard.hide();
                         _navCollapsed = false;
                       }),
                     ),

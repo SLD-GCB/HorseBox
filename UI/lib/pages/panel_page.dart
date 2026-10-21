@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -9,6 +10,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:horsebox_backend/horsebox_backend.dart';
 
 import '../state/app_state.dart';
+import '../widgets/password_keyboard.dart';
 import '../theme.dart';
 import '../widgets/section.dart';
 
@@ -282,7 +284,16 @@ class _PanelPageState extends State<PanelPage> {
 })();
       ''';
 
+  /// 面板里的密码框获得焦点时，由内置键盘接管输入。
+  void _openPageKeypad() {
+    final web = _web;
+    if (web == null) return;
+    // 面板页的键盘压短一点，别把登录卡片挡死。
+    PasswordKeyboard.show(_WebKeySink(web), title: '面板密码', height: 200);
+  }
+
   void _back() {
+    PasswordKeyboard.hide();
     _exitLandscape();
     PanelClient.revokeWindowsPin();
     setState(() {
@@ -297,6 +308,7 @@ class _PanelPageState extends State<PanelPage> {
 
   @override
   void dispose() {
+    PasswordKeyboard.hide();
     _exitLandscape();
     PanelClient.revokeWindowsPin();
     _addr.dispose();
@@ -382,14 +394,10 @@ class _PanelPageState extends State<PanelPage> {
                 ),
               ),
               const SizedBox(height: 10),
-              TextField(
+              KeyField(
                 controller: _addr,
+                hint: 'https://1.2.3.4:8443',
                 keyboardType: TextInputType.url,
-                style: const TextStyle(fontSize: 12.5),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'https://1.2.3.4:8443',
-                ),
                 onSubmitted: (_) => _openByAddress(),
               ),
               const SizedBox(height: 10),
@@ -508,9 +516,24 @@ class _PanelPageState extends State<PanelPage> {
                   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
                   forMainFrameOnly: false,
                 ),
+              if (Platform.isAndroid)
+                UserScript(
+                  source: _panelKeyScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                  forMainFrameOnly: false,
+                ),
             ]),
             onWebViewCreated: (controller) {
               _web = controller;
+              if (Platform.isAndroid) {
+                controller.addJavaScriptHandler(
+                  handlerName: 'hbPasswordFocus',
+                  callback: (args) {
+                    _openPageKeypad();
+                    return null;
+                  },
+                );
+              }
             },
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
@@ -539,6 +562,7 @@ class _PanelPageState extends State<PanelPage> {
               if (Platform.isAndroid) {
                 await controller.evaluateJavascript(source: _imeScript);
                 await controller.evaluateJavascript(source: _passwordFixScript);
+                await controller.evaluateJavascript(source: _panelKeyScript);
                 await _applyIme();
               }
             },
@@ -749,13 +773,25 @@ const _imeScript = r'''
 ''';
 
 /// Android：WebView 里 type=password 的输入框会触发输入法的「安全键盘」。
-/// 把类型改成 text 再用 -webkit-text-security 画圆点，输入法看到的就是普通文本框，
-/// 界面上仍然是遮住的。
+/// 把类型改成 text，输入法看到的就是普通文本框，也就不会切成安全键盘。
+/// 字段内容不做遮罩：面板登录时用户需要看清自己输入了什么。
 const _passwordFixScript = r"""
 (function () {
   if (window.__hbPwdFix) return;
 
-  var MASK = 'disc';
+  // 隐藏态用 CSS 画圆点，字段本身始终是 text，输入法看不到密码类型。
+  function seal(el, hidden) {
+    try {
+      el.setAttribute('data-hb-pwd', '1');
+      if (hidden) {
+        el.setAttribute('data-hb-hidden', '1');
+        el.style.webkitTextSecurity = 'disc';
+      } else {
+        el.removeAttribute('data-hb-hidden');
+        el.style.webkitTextSecurity = 'none';
+      }
+    } catch (e) {}
+  }
 
   function relax(el) {
     if (!el || el.tagName !== 'INPUT') return;
@@ -763,8 +799,8 @@ const _passwordFixScript = r"""
     if (type !== 'password') return;
     try { el.type = 'text'; } catch (e) {}
     el.setAttribute('type', 'text');
-    el.setAttribute('data-hb-pwd', '1');
-    el.style.webkitTextSecurity = MASK;
+    // 页面自己渲染成密码框时默认遮住，之后交给眼睛按钮切换。
+    seal(el, el.getAttribute('data-hb-hidden') !== '0');
     if (!el.getAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
   }
 
@@ -784,15 +820,16 @@ const _passwordFixScript = r"""
         enumerable: desc.enumerable,
         get: desc.get,
         set: function (value) {
-          if (String(value).toLowerCase() === 'password') {
+          var next = String(value).toLowerCase();
+          if (next === 'password') {
+            // Element 的「显示密码」按钮就是靠改 type 实现的：这里必须
+            // 记住它的意图，用 CSS 遮罩代替 password 类型。
             desc.set.call(this, 'text');
-            try {
-              this.setAttribute('data-hb-pwd', '1');
-              this.style.webkitTextSecurity = MASK;
-            } catch (e) {}
+            seal(this, true);
             return;
           }
           desc.set.call(this, value);
+          if (next === 'text') seal(this, false);
         }
       });
       proto.__hbTypeTrap = true;
@@ -823,3 +860,95 @@ const _passwordFixScript = r"""
   window.__hbPwdFix = true;
 })();
 """;
+
+/// 面板 WebView 的键盘出口：把按键转成 JS 调用，写进当前聚焦的密码框。
+class _WebKeySink extends PasswordKeySink {
+  _WebKeySink(this.web);
+
+  final InAppWebViewController web;
+
+  void _call(String op, [String? value]) {
+    final arg = value == null ? 'null' : jsonEncode(value);
+    unawaited(
+      web.evaluateJavascript(
+        source: 'window.__hbKey && window.__hbKey("$op", $arg)',
+      ),
+    );
+  }
+
+  @override
+  void insert(String text) => _call('insert', text);
+
+  @override
+  void backspace() => _call('backspace');
+
+  @override
+  void clear() => _call('clear');
+}
+
+/// Android：面板里的密码框改由 App 内置键盘输入。聚焦时挡住系统输入法，
+/// 并把焦点字段记下来，之后按键都写进这个字段。
+const _panelKeyScript = r'''
+(function () {
+  function masked(el) {
+    if (!el || el.tagName !== 'INPUT') return false;
+    if (el.getAttribute('data-hb-pwd') === '1') return true;
+    if ((el.getAttribute('type') || '').toLowerCase() === 'password') return true;
+    var style = window.getComputedStyle(el);
+    var mask = style.webkitTextSecurity;
+    return !!mask && mask !== 'none';
+  }
+
+  function field() {
+    var el = window.__hbField;
+    if (el && el.isConnected) return el;
+    var list = document.querySelectorAll('input[data-hb-pwd="1"], input[type="password"]');
+    return list.length ? list[0] : null;
+  }
+
+  window.__hbKey = function (op, value) {
+    var el = field();
+    if (!el) return false;
+    el.focus();
+    var start = el.selectionStart == null ? el.value.length : el.selectionStart;
+    var end = el.selectionEnd == null ? el.value.length : el.selectionEnd;
+    if (op === 'insert') {
+      el.value = el.value.slice(0, start) + value + el.value.slice(end);
+      var pos = start + value.length;
+      el.setSelectionRange(pos, pos);
+    } else if (op === 'backspace') {
+      if (start !== end) {
+        el.value = el.value.slice(0, start) + el.value.slice(end);
+        el.setSelectionRange(start, start);
+      } else if (start > 0) {
+        el.value = el.value.slice(0, start - 1) + el.value.slice(start);
+        el.setSelectionRange(start - 1, start - 1);
+      }
+    } else if (op === 'clear') {
+      el.value = '';
+      el.setSelectionRange(0, 0);
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  };
+
+  document.addEventListener('focusin', function (event) {
+    var el = event.target;
+    if (!masked(el)) return;
+    window.__hbField = el;
+    // 这个字段交给 App 的内置键盘，别让系统输入法弹出来。
+    el.setAttribute('inputmode', 'none');
+    try {
+      if (window.flutter_inappwebview) {
+        window.flutter_inappwebview.callHandler('hbPasswordFocus');
+      }
+    } catch (e) {}
+    function center() {
+      try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+    }
+    center();
+    setTimeout(center, 320);
+  }, true);
+})();
+''';

@@ -11,6 +11,7 @@ import 'package:xterm/xterm.dart';
 import '../ssh/ssh_connection.dart';
 import '../ssh/ssh_forwarder.dart';
 import '../state/app_state.dart';
+import '../widgets/password_keyboard.dart';
 import 'ssh_files_page.dart';
 import 'ssh_forward_sheet.dart';
 
@@ -28,6 +29,7 @@ class SshTerminalPage extends StatefulWidget {
 class _SshTerminalPageState extends State<SshTerminalPage> {
   final Terminal _terminal = Terminal(maxLines: 5000);
   final TerminalController _terminalController = TerminalController();
+  final ScrollController _scroll = ScrollController();
   final SshConnection _conn = SshConnection();
   late final SshForwarder _forwarder = SshForwarder(_conn);
   final FocusNode _focus = FocusNode();
@@ -38,6 +40,10 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   String? _error;
   Timer? _longPress;
   bool _menuOpen = false;
+  Offset _downPosition = Offset.zero;
+  bool _pointerMoved = false;
+  bool _draggingSelection = false;
+  double _swipeAccum = 0;
 
   /// Android 的选区光标：base/extent 是两端的单元格坐标，拖动时改写其中一个。
   CellOffset? _selBase;
@@ -60,6 +66,8 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
 
   @override
   void dispose() {
+    PasswordKeyboard.hide();
+    _scroll.dispose();
     _focus.removeListener(_onFocusChanged);
     _stdout?.cancel();
     _forwarder.stopAll();
@@ -145,7 +153,8 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
 
   void _send(String data) {
     _conn.write(utf8.encode(data));
-    _focus.requestFocus();
+    // 安卓用内置键盘，终端不需要再抢焦点；桌面才需要保持物理键盘输入。
+    if (!Platform.isAndroid) _focus.requestFocus();
   }
 
   Future<void> _openForwards() async {
@@ -204,23 +213,29 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   Widget _terminalArea() {
     return Listener(
       onPointerDown: _onPointerDown,
-      onPointerMove: (_) => _longPress?.cancel(),
-      onPointerUp: (_) => _longPress?.cancel(),
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUp,
       onPointerCancel: (_) => _longPress?.cancel(),
-      child: TerminalView(
-        _terminal,
-        key: _viewKey,
-        controller: _terminalController,
-        focusNode: _focus,
-        autofocus: true,
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-        textStyle: const TerminalStyle(fontSize: 12.5),
-        theme: TerminalThemes.defaultTheme,
-        keyboardType: TextInputType.text,
-        // 桌面端直接读硬件按键的 character，不走输入法连接：
-        // 输入法连接拿不到普通字符，数字字母会打不进去。
-        // Android 保持输入法模式，用的就是系统当前输入法。
-        hardwareKeyboardOnly: !Platform.isAndroid,
+      child: Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        interactive: true,
+        thickness: 6,
+        radius: const Radius.circular(3),
+        child: TerminalView(
+          _terminal,
+          key: _viewKey,
+          scrollController: _scroll,
+          controller: _terminalController,
+          focusNode: _focus,
+          autofocus: true,
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          textStyle: const TerminalStyle(fontSize: 12.5),
+          theme: TerminalThemes.defaultTheme,
+          keyboardType: TextInputType.text,
+          // 两端都不建输入法连接：桌面直接用物理键盘，安卓用 App 内置键盘。
+          hardwareKeyboardOnly: true,
+        ),
       ),
     );
   }
@@ -232,6 +247,9 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
       return;
     }
     if (event.kind != PointerDeviceKind.touch) return;
+    _downPosition = event.position;
+    _pointerMoved = false;
+    _swipeAccum = 0;
     // 已经有选区时，点空白处先取消，避免光标一直挂在屏幕上。
     if (_selectionActive) {
       _clearSelection();
@@ -242,7 +260,69 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
     _longPress?.cancel();
     _longPress = Timer(const Duration(milliseconds: 450), () {
       _startSelection(local);
+      // 长按后手指不抬起来，继续拖就能扩选；vi / less 这类全屏程序里
+      // 光靠两端光标不好拖，这个手势更顺手。
+      _draggingSelection = true;
     });
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_draggingSelection) {
+      _extendSelection(event.localPosition);
+      return;
+    }
+    if ((event.position - _downPosition).distance > 12) {
+      _pointerMoved = true;
+      _longPress?.cancel();
+    }
+    // vi / less 这类全屏程序用的是备用屏幕，终端没有可滚动的历史缓冲，
+    // 滑动时改发 PgUp / PgDn，让程序自己翻页。
+    if (_terminal.isUsingAltBuffer && !_selectionActive) {
+      _swipeAccum += event.delta.dy;
+      // 备用屏幕没有滚动缓冲，只能翻页；阈值放到 10px，滑一点就翻，
+      // 手感接近连续滚动（一次滑动会连续发几十条）。
+      // Ctrl+E / Ctrl+Y 是 vi、less 通用的「滚一行」，比整页翻动更跟手。
+      while (_swipeAccum <= -8) {
+        _swipeAccum += 8;
+        _send('\x05');
+      }
+      while (_swipeAccum >= 8) {
+        _swipeAccum -= 8;
+        _send('\x19');
+      }
+    }
+  }
+
+  /// 长按后拖动：把选区另一端跟到手指所在的单元格。
+  void _extendSelection(Offset local) {
+    final view = _viewKey.currentState;
+    final base = _selBase;
+    if (view == null || base == null) return;
+    final cell = view.renderTerminal.getCellOffset(local);
+    setState(() => _selExtent = cell);
+    _terminalController.setSelection(
+      _terminal.buffer.createAnchorFromOffset(base),
+      _terminal.buffer.createAnchorFromOffset(cell),
+      mode: SelectionMode.line,
+    );
+  }
+
+  /// 轻点终端：安卓弹出内置键盘；拖动（滚动）和长按（选字）不触发。
+  void _onPointerUp(PointerUpEvent event) {
+    _longPress?.cancel();
+    _draggingSelection = false;
+    if (!Platform.isAndroid) return;
+    if (_pointerMoved || _selectionActive) return;
+    _openKeypad();
+  }
+
+  void _openKeypad() {
+    PasswordKeyboard.show(
+      _TerminalSink(this),
+      title: '终端',
+      height: 240,
+      terminal: true,
+    );
   }
 
   Future<void> _openMenu(Offset global) async {
@@ -628,4 +708,23 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
       ),
     );
   }
+}
+
+/// 内置键盘 -> SSH 字节流。
+class _TerminalSink extends PasswordKeySink {
+  _TerminalSink(this.state);
+
+  final _SshTerminalPageState state;
+
+  @override
+  void insert(String text) => state._send(text);
+
+  @override
+  void backspace() => state._send('\x7f');
+
+  @override
+  void clear() {}
+
+  @override
+  void paste(String text) => state._terminal.paste(text);
 }

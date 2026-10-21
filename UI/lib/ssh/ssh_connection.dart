@@ -38,11 +38,35 @@ class SshConnection {
     return shell;
   }
 
+  Timer? _flushTimer;
+  bool _flushing = false;
+
   void write(List<int> data) {
-    _shell?.stdin.add(Uint8List.fromList(data));
+    final shell = _shell;
+    if (shell == null) return;
+    shell.stdin.add(Uint8List.fromList(data));
+    // dartssh2 的 stdin 会先攒在通道里，等 flush 才真正发出去。
+    // 但逐键 flush 会和通道的上传队列打架（连打几个键就可能把连接搞断），
+    // 这里合并成 8ms 一次：既不会憋几秒，也不会每个字符都冲一次。
+    _flushTimer?.cancel();
+    _flushTimer = Timer(const Duration(milliseconds: 16), () async {
+      final current = _shell;
+      if (current == null || _flushing) return;
+      _flushing = true;
+      try {
+        await current.flush();
+      } catch (_) {
+        // 连接已经断开时 flush 会抛，吞掉即可，不要影响输入流程。
+      } finally {
+        _flushing = false;
+      }
+    });
   }
 
   void resize(int cols, int rows) {
+    // 键盘弹出时终端会被压得很扁，xterm 可能算出 0 行 0 列；
+    // 给服务端发 0 尺寸会让部分 sshd 直接断开会话，这里兜个底。
+    if (cols < 20 || rows < 5) return;
     _shell?.resizeTerminal(cols, rows);
   }
 
@@ -64,6 +88,8 @@ class SshConnection {
   }
 
   Future<void> close() async {
+    _flushTimer?.cancel();
+    _flushTimer = null;
     final sftpClient = _sftp;
     _sftp = null;
     if (sftpClient != null) {

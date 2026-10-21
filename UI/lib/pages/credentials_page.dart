@@ -4,6 +4,7 @@ import 'package:horsebox_backend/horsebox_backend.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/masked_field.dart';
+import '../widgets/password_keyboard.dart';
 import '../widgets/section.dart';
 
 /// 密码本：一个面板一条记录，登录面板时在「面板」页一键填入。
@@ -212,6 +213,7 @@ class _CredentialDialogState extends State<_CredentialDialog> {
     _panel.dispose();
     _user.dispose();
     _password.dispose();
+    PasswordKeyboard.hide();
     super.dispose();
   }
 
@@ -240,44 +242,43 @@ class _CredentialDialogState extends State<_CredentialDialog> {
       title: Text(_editing ? '编辑记录' : '添加面板账号'),
       content: SizedBox(
         width: 460,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _panel,
-              autofocus: !_editing,
-              decoration: const InputDecoration(
-                labelText: '面板地址',
-                hintText: '1.2.3.4:8443',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              KeyField(
+                controller: _panel,
+                label: '面板地址',
+                hint: '1.2.3.4:8443',
+                onSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _user,
-              decoration: const InputDecoration(labelText: '用户名'),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            MaskedTextField(
-              controller: _password,
-              label: '密码',
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _error!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error,
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _user,
+                label: '用户名',
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              SecretField(
+                controller: _password,
+                label: '密码',
+                onSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [

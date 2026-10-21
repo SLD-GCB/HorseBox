@@ -4,6 +4,7 @@ import 'package:horsebox_backend/horsebox_backend.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/masked_field.dart';
+import '../widgets/password_keyboard.dart';
 import '../widgets/section.dart';
 import 'ssh_terminal_page.dart';
 
@@ -274,6 +275,7 @@ class _HostDialogState extends State<_HostDialog> {
     _port.dispose();
     _user.dispose();
     _password.dispose();
+    PasswordKeyboard.hide();
     super.dispose();
   }
 
@@ -310,69 +312,57 @@ class _HostDialogState extends State<_HostDialog> {
       title: Text(_editing ? '编辑主机' : '添加主机'),
       content: SizedBox(
         width: 460,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _host,
-              autofocus: !_editing,
-              decoration: const InputDecoration(
-                labelText: '主机 / IP',
-                hintText: '1.2.3.4 或 example.com',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              KeyField(
+                controller: _host,
+                label: '主机 / IP',
+                hint: '1.2.3.4 或 example.com',
+                onSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _user,
-                    decoration: const InputDecoration(labelText: '用户名'),
-                    onSubmitted: (_) => _submit(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _port,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: '端口'),
-                    onSubmitted: (_) => _submit(),
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _user,
+                label: '用户名',
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _port,
+                label: '端口',
+                keyboardType: TextInputType.number,
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              SecretField(
+                controller: _password,
+                label: '密码',
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _name,
+                label: '备注名（可选）',
+                hint: '留空则显示 用户名@主机',
+                onSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            MaskedTextField(
-              controller: _password,
-              label: '密码',
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: '备注名（可选）',
-                hintText: '留空则显示 用户名@主机',
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _error!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
             ],
-          ],
+          ),
         ),
       ),
       actions: [

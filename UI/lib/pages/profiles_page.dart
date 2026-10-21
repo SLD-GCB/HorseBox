@@ -4,6 +4,7 @@ import 'package:horsebox_backend/horsebox_backend.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/format.dart';
+import '../widgets/password_keyboard.dart';
 import '../widgets/section.dart';
 
 /// 订阅管理：展开后可填证书指纹、查看节点。
@@ -827,67 +828,52 @@ class _ProfileDialogState extends State<_ProfileDialog> {
       title: Text(_editing ? '编辑订阅' : '添加订阅'),
       content: SizedBox(
         width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _url,
-              autofocus: !_editing,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '订阅地址',
-                hintText: 'https://面板地址/sub/令牌?target=singbox',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              KeyField(
+                controller: _url,
+                label: '订阅地址',
+                hint: 'https://面板地址/sub/令牌?target=singbox',
+                onSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: '名称（可选）',
-                hintText: '留空则使用面板域名',
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _name,
+                label: '名称（可选）',
+                hint: '留空则使用面板域名',
+                onSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pin,
-              style: HorseBoxTheme.mono(context, size: 12),
-              decoration: const InputDecoration(
-                labelText: '面板证书 SHA-256 指纹（可选）',
-                hintText: '自签证书时填写，留空则只信任系统证书',
-                isDense: true,
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _pin,
+                label: '面板证书 SHA-256 指纹（可选）',
+                hint: '自签证书时填写，留空则只信任系统证书',
+                onSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _quota,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _quota,
+                label: '流量总额（GB，可选）',
+                hint: '留空或 0 表示不限；已用由客户端本地累计',
+                onSubmitted: (_) => _submit(),
               ),
-              decoration: const InputDecoration(
-                labelText: '流量总额（GB，可选）',
-                hintText: '留空或 0 表示不限；已用由客户端本地累计',
-                isDense: true,
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _error!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error,
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [

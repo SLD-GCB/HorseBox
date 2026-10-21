@@ -152,7 +152,12 @@ if errorlevel 1 (
 
 :skip_windows
 rem ---------------------------------------------------------------- Android
-if /i "%TARGET%"=="win" goto :skip_android
+if /i "%TARGET%"=="win" goto if /i "%PUSH_FDROID%"=="1" (
+  echo [6] 推送到 F-Droid...
+  "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\push-fdroid.ps1" -Apk "%DIST%\HorseBox-%VER%-android-arm64.apk" -VersionCode "%VER%_%BUILD%"
+)
+
+:skip_android
 
 echo [4] 构建 Android Release（arm64 + x86_64，按 ABI 分包）...
 call "%ROOT%android\sync-libbox.bat"

@@ -8,6 +8,7 @@ import 'platform/vpn_channel.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'utils/app_paths.dart';
+import 'widgets/password_keyboard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,8 @@ class HorseBoxApp extends StatelessWidget {
           theme: HorseBoxTheme.build(brightness: Brightness.light),
           darkTheme: HorseBoxTheme.build(brightness: Brightness.dark),
           themeMode: mode,
+          builder: (context, child) =>
+              PasswordKeyboardHost(child: child ?? const SizedBox.shrink()),
           home: HomeShell(state: state),
         );
       },
