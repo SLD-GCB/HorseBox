@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier {
   static const _kCredentials = 'panel_credentials';
   static const _kActive = 'active_profile';
   static const _kSettings = 'settings';
+  static const _kUsage = 'panel_usage';
 
   LocalStore _store;
   String _dataDir;
@@ -59,10 +60,11 @@ class AppState extends ChangeNotifier {
   bool _busy = false;
   bool _disposed = false;
 
-  /// 本地流量累计：按每秒速率对时间积分，记到连接时使用的那个订阅上。
-  Profile? _usageTarget;
-  DateTime _lastTrafficAt = DateTime.now();
-  int _usageSincePersist = 0;
+  /// 面板用量：键是订阅 id，值以面板返回为准；断网时保留上一次的值。
+  final Map<String, PanelUsage> _usage = {};
+  final Map<String, String> _usageError = {};
+  Timer? _usageTimer;
+  final Set<String> _usageInFlight = {};
 
   List<Profile> get profiles => List.unmodifiable(_profiles);
   List<SshHost> get sshHosts => List.unmodifiable(_sshHosts);
@@ -76,6 +78,12 @@ class AppState extends ChangeNotifier {
   String get coreVersion => _coreVersion;
   int get clashPort => _clashPort;
   TrafficSample get traffic => _traffic;
+
+  /// 订阅在面板侧的用量；还没查过时返回 null。
+  PanelUsage? usageOf(Profile profile) => _usage[profile.id];
+
+  /// 最近一次查询用量的错误（成功后会清掉）。
+  String? usageErrorOf(Profile profile) => _usageError[profile.id];
   List<LogEntry> get logs => List.unmodifiable(_logs);
   List<ConnectionRow> get connections => _connections;
   String get dataDir => _dataDir;
@@ -122,15 +130,89 @@ class AppState extends ChangeNotifier {
     if (rawSettings is Map) {
       _settings = AppSettings.fromJson(Map<String, dynamic>.from(rawSettings));
     }
+    final rawUsage = _store.get(_kUsage);
+    if (rawUsage is Map) {
+      for (final entry in rawUsage.entries) {
+        final value = entry.value;
+        if (value is Map) {
+          _usage['${entry.key}'] = PanelUsage.fromJson(
+            Map<String, dynamic>.from(value),
+          );
+        }
+      }
+    }
     try {
       _rulesDir = await ensureCnRuleSets(_dataDir);
     } catch (_) {
       _rulesDir = '';
     }
+    _usageTimer?.cancel();
+    _usageTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => unawaited(refreshUsage()),
+    );
     _notify();
+    unawaited(refreshUsage());
     if (!Platform.isAndroid && _settings.autoConnect && activeProfile != null) {
       unawaited(connect());
     }
+  }
+
+  /// 拉一次面板用量。默认查当前订阅，也可以指定某一个。
+  Future<void> refreshUsage({Profile? profile}) async {
+    final target = profile ?? activeProfile;
+    if (target == null || _usageInFlight.contains(target.id)) return;
+    _usageInFlight.add(target.id);
+    final base = PanelUsageClient.baseOf(target.url);
+    if (base == null) {
+      _usageInFlight.remove(target.id);
+      _usageError[target.id] = '订阅地址不是 http(s)，无法查询用量';
+      _notify();
+      return;
+    }
+    final subToken = PanelUsageClient.subTokenOf(target.url);
+    if (subToken.isEmpty) {
+      _usageInFlight.remove(target.id);
+      _usageError[target.id] = '订阅地址里没有令牌，无法按用户查询用量';
+      _notify();
+      return;
+    }
+    final credential = _credentialForPanel(base);
+    if (credential == null) {
+      _usageInFlight.remove(target.id);
+      _usageError[target.id] = '先在「密码本」添加该面板的账号，才能查询用量';
+      _notify();
+      return;
+    }
+    try {
+      final usage = await PanelUsageClient.fetch(
+        base: base,
+        username: credential.username,
+        password: credential.password,
+        subToken: subToken,
+        certPin: _pinFor(target),
+      );
+      _usage[target.id] = usage;
+      _usageError.remove(target.id);
+      await _store.set(_kUsage, {
+        for (final entry in _usage.entries) entry.key: entry.value.toJson(),
+      });
+    } catch (e) {
+      _usageError[target.id] = e is PanelUsageException ? e.message : '$e';
+    } finally {
+      _usageInFlight.remove(target.id);
+      _notify();
+    }
+  }
+
+  /// 按面板地址（host:port）找密码本里对应那条管理员账号。
+  PanelCredential? _credentialForPanel(String base) {
+    final authority = normalizePanel(base);
+    if (authority.isEmpty) return null;
+    for (final item in _credentials) {
+      if (normalizePanel(item.panel) == authority) return item;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- 密码本
@@ -332,25 +414,13 @@ class AppState extends ChangeNotifier {
     _notify();
   }
 
-  /// 设置订阅的流量总额（字节，0 表示不限）。
-  Future<void> setQuota(Profile profile, int bytes) async {
-    profile.quotaBytes = bytes < 0 ? 0 : bytes;
-    await _persistProfiles();
-    _notify();
-  }
-
-  /// 清零本地累计用量。
-  Future<void> resetUsage(Profile profile) async {
-    profile.usedBytes = 0;
-    await _persistProfiles();
-    _notify();
-  }
-
   Future<void> setActive(String id) async {
-    if (!_profiles.any((item) => item.id == id)) return;
+    final target = _profiles.where((item) => item.id == id).firstOrNull;
+    if (target == null) return;
     _activeId = id;
     await _persistProfiles();
     _notify();
+    unawaited(refreshUsage(profile: target));
   }
 
   /// 拉一次订阅，返回节点数量，用于添加前的连通性检查。
@@ -515,13 +585,12 @@ class AppState extends ChangeNotifier {
             .listen(_appendLog, onError: (Object _) {});
       }
 
-      _usageTarget = profile;
-      _lastTrafficAt = DateTime.now();
       _trafficSub = api.traffic().listen((sample) {
         _traffic = sample;
-        _accumulateUsage(sample);
         _notify();
       }, onError: (Object _) {});
+      // 连上之后立刻刷新一次面板用量，用户能看到最新的已用流量。
+      unawaited(refreshUsage(profile: profile));
 
       _connectedAt = DateTime.now();
       _startTimers();
@@ -533,24 +602,6 @@ class AppState extends ChangeNotifier {
     } finally {
       _busy = false;
       _notify();
-    }
-  }
-
-  /// 把这一秒的速率折算成字节累加到订阅上；攒够 8MB 落一次盘。
-  void _accumulateUsage(TrafficSample sample) {
-    final profile = _usageTarget;
-    if (profile == null) return;
-    final now = DateTime.now();
-    final seconds = now.difference(_lastTrafficAt).inMicroseconds / 1000000.0;
-    _lastTrafficAt = now;
-    if (seconds <= 0) return;
-    final bytes = ((sample.up + sample.down) * seconds).round();
-    if (bytes <= 0) return;
-    profile.usedBytes += bytes;
-    _usageSincePersist += bytes;
-    if (_usageSincePersist >= 8 * 1024 * 1024) {
-      _usageSincePersist = 0;
-      unawaited(_persistProfiles());
     }
   }
 
@@ -685,11 +736,6 @@ class AppState extends ChangeNotifier {
     _connections = const [];
     _connectedAt = null;
     _coreVersion = '';
-    _usageTarget = null;
-    if (_usageSincePersist > 0) {
-      _usageSincePersist = 0;
-      unawaited(_persistProfiles());
-    }
   }
 
   void _onCoreExit(int code) {
@@ -763,6 +809,7 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _pollTimer?.cancel();
     _tickTimer?.cancel();
+    _usageTimer?.cancel();
     _trafficSub?.cancel();
     _apiLogSub?.cancel();
     _processLogSub?.cancel();

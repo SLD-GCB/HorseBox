@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:horsebox_backend/horsebox_backend.dart';
 
 import '../state/app_state.dart';
 import '../utils/format.dart';
@@ -147,6 +148,8 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                   if (state.activeProfile != null) ...[
+                    const SizedBox(height: 12),
+                    _UsageSummary(state: state, profile: state.activeProfile!),
                     const Divider(height: 24),
                     Row(
                       children: [
@@ -266,6 +269,135 @@ class _ConnectButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 面板用量：已用 / 总量 / 到期。数据来自面板，客户端不再自己累计。
+class _UsageSummary extends StatelessWidget {
+  const _UsageSummary({required this.state, required this.profile});
+
+  final AppState state;
+  final Profile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final usage = state.usageOf(profile);
+    final error = state.usageErrorOf(profile);
+    if (usage == null) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              error ?? '正在从面板获取用量…',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.4,
+                color: error == null ? scheme.onSurfaceVariant : scheme.error,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => state.refreshUsage(profile: profile),
+            child: const Text('重试'),
+          ),
+        ],
+      );
+    }
+    final quota = usage.quotaBytes;
+    final unlimited = usage.unlimited;
+    final ratio = unlimited ? 0.0 : (usage.usedBytes / quota).clamp(0.0, 1.0);
+    final color = ratio >= 0.9
+        ? scheme.error
+        : ratio >= 0.75
+        ? const Color(0xFFD9A31B)
+        : scheme.primary;
+    final head = unlimited
+        ? '已用 ${formatBytes(usage.usedBytes)}'
+        : '已用 ${formatBytes(usage.usedBytes)} / 共 ${formatBytes(quota)}';
+    final tail = unlimited
+        ? '不限流量'
+        : (usage.usedBytes >= quota
+              ? '已用完'
+              : '剩 ${formatBytes(quota - usage.usedBytes)}');
+    final expire = usage.expireAt == null
+        ? '不限期'
+        : (usage.daysLeft ?? 0) <= 0
+        ? '已到期'
+        : '剩 ${usage.daysLeft} 天到期';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: unlimited ? 0 : ratio,
+            minHeight: 5,
+            backgroundColor: scheme.onSurface.withValues(alpha: 0.10),
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                head,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Text(
+              tail,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: !unlimited && usage.usedBytes >= quota
+                    ? scheme.error
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                error ?? '$expire · ${_ago(usage.fetchedAt)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: error == null ? scheme.onSurfaceVariant : scheme.error,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: '刷新用量',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              onPressed: () => state.refreshUsage(profile: profile),
+              icon: Icon(
+                Icons.refresh,
+                size: 15,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _ago(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return '刚刚更新';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前更新';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前更新';
+    return '${diff.inDays} 天前更新';
   }
 }
 

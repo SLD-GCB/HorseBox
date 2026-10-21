@@ -6,6 +6,7 @@ export 'src/config_patch.dart';
 export 'src/core_paths.dart';
 export 'src/models.dart';
 export 'src/panel_client.dart';
+export 'src/panel_usage.dart';
 export 'src/pinned_http.dart';
 export 'src/singbox_runner.dart';
 export 'src/store.dart';

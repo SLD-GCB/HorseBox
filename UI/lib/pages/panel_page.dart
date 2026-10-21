@@ -269,7 +269,7 @@ class _PanelPageState extends State<PanelPage> {
     if (type === 'hidden' || type === 'checkbox' || type === 'radio' || type === 'submit' ||
         type === 'button' || type === 'file' || type === 'search') continue;
     if (!pwd && (type === 'password' || isMasked(el))) { pwd = el; continue; }
-    if (usr) continue;
+    if (usr || el === pwd) continue;
     if (looksSecret(el)) { if (!pwd) pwd = el; continue; }
     usr = el;
   }
@@ -782,6 +782,12 @@ const _passwordFixScript = r"""
   // 隐藏态用 CSS 画圆点，字段本身始终是 text，输入法看不到密码类型。
   function seal(el, hidden) {
     try {
+      // 只有本来是密码框（已经打过标记）或明确要隐藏时才打标记，
+      // 否则普通输入框（用户名）也会被当成密码框，填充会填错位置。
+      if (!hidden && el.getAttribute('data-hb-pwd') !== '1') {
+        el.style.webkitTextSecurity = 'none';
+        return;
+      }
       el.setAttribute('data-hb-pwd', '1');
       if (hidden) {
         el.setAttribute('data-hb-hidden', '1');

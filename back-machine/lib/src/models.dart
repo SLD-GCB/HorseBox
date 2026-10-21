@@ -9,8 +9,6 @@ class Profile {
     required this.url,
     this.certPin = '',
     this.selectedNode = '',
-    this.quotaBytes = 0,
-    this.usedBytes = 0,
     DateTime? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now();
 
@@ -24,12 +22,6 @@ class Profile {
   /// 手动选择的节点 tag；空字符串表示自动（urltest）。
   String selectedNode;
 
-  /// 手动填写的流量总额（字节）；0 表示不限。
-  int quotaBytes;
-
-  /// 客户端本地累计的已用流量（字节），只算经本机转发的部分。
-  int usedBytes;
-
   DateTime updatedAt;
 
   Map<String, dynamic> toJson() => {
@@ -38,8 +30,6 @@ class Profile {
     'url': url,
     'cert_pin': certPin,
     'selected_node': selectedNode,
-    'quota_bytes': quotaBytes,
-    'used_bytes': usedBytes,
     'updated_at': updatedAt.toIso8601String(),
   };
 
@@ -52,8 +42,6 @@ class Profile {
       url: json['url'] as String? ?? '',
       certPin: json['cert_pin'] as String? ?? '',
       selectedNode: json['selected_node'] as String? ?? '',
-      quotaBytes: (json['quota_bytes'] as num?)?.toInt() ?? 0,
-      usedBytes: (json['used_bytes'] as num?)?.toInt() ?? 0,
       updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
     );
   }
@@ -553,4 +541,3 @@ class PanelCredential {
     );
   }
 }
-

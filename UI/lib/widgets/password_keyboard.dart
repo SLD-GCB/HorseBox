@@ -536,6 +536,18 @@ class _KeyFieldState extends State<KeyField> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 桌面端有物理键盘，直接用原生输入框，不弹内置键盘。
+    if (!Platform.isAndroid) {
+      return TextField(
+        controller: widget.controller,
+        keyboardType: widget.keyboardType ?? TextInputType.text,
+        onSubmitted: widget.onSubmitted,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          hintText: widget.hint,
+        ),
+      );
+    }
     return TextField(
       controller: widget.controller,
       focusNode: _focus,
