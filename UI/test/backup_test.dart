@@ -1,0 +1,70 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:horsebox/security/data_backup.dart';
+import 'package:path/path.dart' as p;
+
+void main() {
+  test('备份可以导出、校验、恢复', () async {
+    final root = await Directory.systemTemp.createTemp('hb_backup_');
+    final dataDir = p.join(root.path, 'data');
+    await Directory(dataDir).create(recursive: true);
+    await File(p.join(dataDir, 'settings.json')).writeAsString(
+      jsonEncode({
+        'profiles': [
+          {'id': '1'},
+          {'id': '2'},
+        ],
+        'ssh_hosts': [
+          {'id': 'h1'},
+        ],
+        'panel_credentials': [],
+      }),
+    );
+    final keyBytes = List<int>.generate(32, (i) => i);
+    await File(p.join(dataDir, 'secret.key'))
+        .writeAsString(base64Encode(keyBytes));
+    await Directory(p.join(dataDir, 'rules')).create(recursive: true);
+    await File(p.join(dataDir, 'rules', 'a.srs')).writeAsString('rule');
+
+    final bytes = await BackupService.export(
+      dataDir: dataDir,
+      passphrase: 'pass12345',
+    );
+    final payload = await BackupService.inspect(
+      bytes: bytes,
+      passphrase: 'pass12345',
+    );
+    expect(payload.profiles, 2);
+    expect(payload.sshHosts, 1);
+    expect(payload.files.containsKey('rules/a.srs'), isTrue);
+
+    await expectLater(
+      BackupService.inspect(bytes: bytes, passphrase: 'wrongpass'),
+      throwsA(isA<BackupException>()),
+    );
+
+    final backupDir = await BackupService.apply(
+      dataDir: dataDir,
+      payload: payload,
+    );
+    expect(Directory(backupDir).existsSync(), isTrue);
+    final restored = jsonDecode(
+      await File(p.join(dataDir, 'settings.json')).readAsString(),
+    );
+    expect((restored as Map)['profiles'], hasLength(2));
+    expect(
+      await File(p.join(dataDir, 'rules', 'a.srs')).readAsString(),
+      'rule',
+    );
+
+    final second = await BackupService.apply(
+      dataDir: dataDir,
+      payload: payload,
+    );
+    expect(Directory(second).existsSync(), isTrue);
+
+    await root.delete(recursive: true);
+  });
+}

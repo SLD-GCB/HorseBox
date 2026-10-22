@@ -1,29 +1,63 @@
 import 'package:flutter/material.dart';
 
-/// HorseBox 主题：绿色主色，深色优先。
+/// HorseBox 主题：主色可自定义，深色优先。
 class HorseBoxTheme {
+  /// 默认主色（绿色）。
   static const seed = Color(0xFF4C8F6F);
 
-  static ThemeData build({Brightness brightness = Brightness.dark}) {
+  /// 可选主色，用户也可以自己调。
+  static const presets = <Color>[
+    Color(0xFF4C8F6F),
+    Color(0xFF3B82F6),
+    Color(0xFF8B5CF6),
+    Color(0xFFEC4899),
+    Color(0xFFEF4444),
+    Color(0xFFF59E0B),
+    Color(0xFF10B981),
+    Color(0xFF06B6D4),
+    Color(0xFF64748B),
+    Color(0xFFD97706),
+  ];
+
+  static ThemeData build({
+    Brightness brightness = Brightness.dark,
+    int accent = 0xFF4C8F6F,
+  }) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
+      seedColor: Color(accent),
       brightness: brightness,
     );
     final dark = brightness == Brightness.dark;
+    // 深色背景保持中性，只带一点主色的味道，换主色时不会整屏变色。
+    final background = dark
+        ? Color.alphaBlend(
+            scheme.primary.withValues(alpha: 0.035),
+            const Color(0xFF0F1011),
+          )
+        : null;
+    final cardColor = dark
+        ? Color.alphaBlend(
+            scheme.primary.withValues(alpha: 0.06),
+            const Color(0xFF16181A),
+          )
+        : scheme.surfaceContainerLow;
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: dark ? const Color(0xFF101613) : null,
+      scaffoldBackgroundColor: background,
       cardTheme: CardThemeData(
         elevation: 0,
-        color: dark ? const Color(0xFF18211C) : scheme.surfaceContainerLow,
+        color: cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: EdgeInsets.zero,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: dark
-            ? const Color(0xFF141C18)
+            ? Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.05),
+                const Color(0xFF14161A),
+              )
             : scheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -36,7 +70,12 @@ class HorseBoxTheme {
         thickness: 1,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: dark ? const Color(0xFF141B17) : null,
+        backgroundColor: dark
+            ? Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.05),
+                const Color(0xFF14161A),
+              )
+            : null,
         indicatorColor: scheme.primary.withValues(alpha: 0.18),
       ),
     );

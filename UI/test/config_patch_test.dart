@@ -44,7 +44,10 @@ void main() {
     final cfg = jsonDecode(text) as Map<String, dynamic>;
 
     expect(cfg['experimental']['cache_file']['enabled'], isFalse);
-    expect(cfg['experimental']['clash_api']['external_controller'], '127.0.0.1:19090');
+    expect(
+      cfg['experimental']['clash_api']['external_controller'],
+      '127.0.0.1:19090',
+    );
 
     final inbounds = (cfg['inbounds'] as List).cast<Map>();
     final tun = inbounds.firstWhere((item) => item['type'] == 'tun');
@@ -57,7 +60,13 @@ void main() {
     final dns = cfg['dns'] as Map;
     expect(dns['final'], 'horsebox-dns-0');
     final servers = (dns['servers'] as List).cast<Map>();
-    expect(servers.any((item) => item['tag'] == 'horsebox-dns-0' && item['server'] == '223.5.5.5'), isTrue);
+    expect(
+      servers.any(
+        (item) =>
+            item['tag'] == 'horsebox-dns-0' && item['server'] == '223.5.5.5',
+      ),
+      isTrue,
+    );
     expect(servers.any((item) => item['tag'] == 'horsebox-hosts'), isTrue);
     final rules = (dns['rules'] as List).cast<Map>();
     expect(rules.first['server'], 'horsebox-hosts');
@@ -89,11 +98,13 @@ void main() {
     );
     final cfg = jsonDecode(text) as Map<String, dynamic>;
     expect((cfg['dns'] as Map)['strategy'], 'ipv4_only');
-    final tun = (cfg['inbounds'] as List)
-        .cast<Map>()
-        .firstWhere((item) => item['type'] == 'tun');
+    final tun = (cfg['inbounds'] as List).cast<Map>().firstWhere(
+      (item) => item['type'] == 'tun',
+    );
     expect(
-      (tun['address'] as List).whereType<String>().any((item) => item.contains(':')),
+      (tun['address'] as List).whereType<String>().any(
+        (item) => item.contains(':'),
+      ),
       isFalse,
     );
   });
@@ -154,8 +165,20 @@ void main() {
     expect(sets.any((item) => item['tag'] == 'geosite-cn'), isTrue);
     expect(sets.any((item) => item['tag'] == 'geoip-cn'), isTrue);
     final rules = (route['rules'] as List).cast<Map>();
-    expect(rules.any((item) => item['domain_suffix'] != null && item['outbound'] == 'proxy'), isTrue);
-    expect(rules.any((item) => (item['rule_set'] as List?)?.contains('geosite-cn') == true && item['outbound'] == 'direct'), isTrue);
+    expect(
+      rules.any(
+        (item) => item['domain_suffix'] != null && item['outbound'] == 'proxy',
+      ),
+      isTrue,
+    );
+    expect(
+      rules.any(
+        (item) =>
+            (item['rule_set'] as List?)?.contains('geosite-cn') == true &&
+            item['outbound'] == 'direct',
+      ),
+      isTrue,
+    );
   });
 
   test('自定义 DNS 使用非空直连出站', () {
@@ -170,9 +193,14 @@ void main() {
     );
     final cfg = jsonDecode(text) as Map<String, dynamic>;
     final outbounds = (cfg['outbounds'] as List).cast<Map>();
-    expect(outbounds.any((item) => item['tag'] == 'horsebox-dns-direct'), isTrue);
+    expect(
+      outbounds.any((item) => item['tag'] == 'horsebox-dns-direct'),
+      isTrue,
+    );
     final dns = cfg['dns'] as Map;
-    final server = (dns['servers'] as List).cast<Map>().firstWhere((item) => item['tag'] == 'horsebox-dns-0');
+    final server = (dns['servers'] as List).cast<Map>().firstWhere(
+      (item) => item['tag'] == 'horsebox-dns-0',
+    );
     expect(server['detour'], 'horsebox-dns-direct');
   });
 
@@ -191,9 +219,11 @@ void main() {
     expect(dns['final'], 'dns-proxy');
     final dnsRules = (dns['rules'] as List).cast<Map>();
     expect(
-      dnsRules.any((item) =>
-          (item['rule_set'] as List?)?.contains('geosite-cn') == true &&
-          item['server'] == 'dns-direct'),
+      dnsRules.any(
+        (item) =>
+            (item['rule_set'] as List?)?.contains('geosite-cn') == true &&
+            item['server'] == 'dns-direct',
+      ),
       isTrue,
     );
     final route = cfg['route'] as Map;
@@ -216,16 +246,19 @@ void main() {
     );
     final cfg = jsonDecode(text) as Map<String, dynamic>;
     final rules = ((cfg['route'] as Map)['rules'] as List).cast<Map>();
-    final googleIndex = rules.indexWhere((item) =>
-        (item['domain_suffix'] as List?)?.contains('gvt1.com') == true);
-    final cnIndex = rules.indexWhere((item) =>
-        (item['rule_set'] as List?)?.contains('geosite-cn') == true);
+    final googleIndex = rules.indexWhere(
+      (item) => (item['domain_suffix'] as List?)?.contains('gvt1.com') == true,
+    );
+    final cnIndex = rules.indexWhere(
+      (item) => (item['rule_set'] as List?)?.contains('geosite-cn') == true,
+    );
     expect(googleIndex, greaterThanOrEqualTo(0));
     expect(cnIndex, greaterThan(googleIndex));
     expect(rules[googleIndex]['outbound'], 'proxy');
 
-    final ipIndex = rules.indexWhere((item) =>
-        (item['ip_cidr'] as List?)?.contains('142.250.0.0/15') == true);
+    final ipIndex = rules.indexWhere(
+      (item) => (item['ip_cidr'] as List?)?.contains('142.250.0.0/15') == true,
+    );
     expect(ipIndex, greaterThanOrEqualTo(0));
     expect(cnIndex, greaterThan(ipIndex));
     expect(rules[ipIndex]['outbound'], 'proxy');
@@ -240,6 +273,9 @@ void main() {
   test('裸 IPv6 自动补方括号', () {
     expect(normalizeDnsServer('2400:3200::1'), '[2400:3200::1]');
     expect(normalizeDnsServer('udp://2400:3200::1'), 'udp://[2400:3200::1]');
-    expect(normalizeDnsServer('https://dns.alidns.com/dns-query'), 'https://dns.alidns.com/dns-query');
+    expect(
+      normalizeDnsServer('https://dns.alidns.com/dns-query'),
+      'https://dns.alidns.com/dns-query',
+    );
   });
 }

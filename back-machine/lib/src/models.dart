@@ -66,6 +66,7 @@ class AppSettings {
     this.hosts = const {},
     this.certPin = '',
     this.themeMode = 'dark',
+    this.accent = 0xFF4C8F6F,
     this.autoConnect = false,
     this.logLimit = 800,
     this.panelUrl = '',
@@ -102,6 +103,9 @@ class AppSettings {
 
   /// system / light / dark。
   final String themeMode;
+
+  /// 主题主色（ARGB），用户可以在「外观」里自定义。
+  final int accent;
   final bool autoConnect;
   final int logLimit;
 
@@ -126,6 +130,7 @@ class AppSettings {
     Map<String, List<String>>? hosts,
     String? certPin,
     String? themeMode,
+    int? accent,
     bool? autoConnect,
     int? logLimit,
     String? panelUrl,
@@ -148,6 +153,7 @@ class AppSettings {
       hosts: hosts ?? this.hosts,
       certPin: certPin ?? this.certPin,
       themeMode: themeMode ?? this.themeMode,
+      accent: accent ?? this.accent,
       autoConnect: autoConnect ?? this.autoConnect,
       logLimit: logLimit ?? this.logLimit,
       panelUrl: panelUrl ?? this.panelUrl,
@@ -172,6 +178,7 @@ class AppSettings {
     'hosts': hosts,
     'cert_pin': certPin,
     'theme_mode': themeMode,
+    'accent': accent,
     'auto_connect': autoConnect,
     'log_limit': logLimit,
     'panel_url': panelUrl,
@@ -226,6 +233,7 @@ class AppSettings {
       hosts: hosts,
       certPin: json['cert_pin'] as String? ?? '',
       themeMode: json['theme_mode'] as String? ?? 'dark',
+      accent: (json['accent'] as num?)?.toInt() ?? 0xFF4C8F6F,
       autoConnect: json['auto_connect'] as bool? ?? false,
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
       panelUrl: json['panel_url'] as String? ?? '',

@@ -5,6 +5,7 @@ import 'package:horsebox_backend/horsebox_backend.dart';
 
 import 'pages/shell.dart';
 import 'platform/vpn_channel.dart';
+import 'security/data_backup.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'utils/app_paths.dart';
@@ -14,6 +15,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final dataDir = await _dataDir();
+    // 上次恢复如果在改名途中被中断，先把旧数据改回来再读配置。
+    await BackupService.recoverIfNeeded(dataDir);
     final store = await LocalStore.open(dataDir);
     final state = AppState(store, dataDir);
     await state.init();
@@ -48,8 +51,14 @@ class HorseBoxApp extends StatelessWidget {
         return MaterialApp(
           title: 'HorseBox',
           debugShowCheckedModeBanner: false,
-          theme: HorseBoxTheme.build(brightness: Brightness.light),
-          darkTheme: HorseBoxTheme.build(brightness: Brightness.dark),
+          theme: HorseBoxTheme.build(
+            brightness: Brightness.light,
+            accent: state.settings.accent,
+          ),
+          darkTheme: HorseBoxTheme.build(
+            brightness: Brightness.dark,
+            accent: state.settings.accent,
+          ),
           themeMode: mode,
           builder: (context, child) =>
               PasswordKeyboardHost(child: child ?? const SizedBox.shrink()),
