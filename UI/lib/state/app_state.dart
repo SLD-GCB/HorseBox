@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import '../platform/vpn_channel.dart';
 import '../utils/app_paths.dart';
 import '../utils/rule_assets.dart';
+import '../widgets/password_keyboard.dart';
 
 enum CoreStatus { idle, connecting, connected, stopping, error }
 
@@ -129,6 +130,7 @@ class AppState extends ChangeNotifier {
     final rawSettings = _store.get(_kSettings);
     if (rawSettings is Map) {
       _settings = AppSettings.fromJson(Map<String, dynamic>.from(rawSettings));
+      _applyKeyboardConfig();
     }
     final rawUsage = _store.get(_kUsage);
     if (rawUsage is Map) {
@@ -620,8 +622,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> updateSettings(AppSettings next) async {
     _settings = next;
+    _applyKeyboardConfig();
     await _store.set(_kSettings, next.toJson());
     _notify();
+  }
+
+  /// 把输入法相关设置同步给内置键盘（键盘是全局单例，拿不到 state）。
+  void _applyKeyboardConfig() {
+    KeyboardConfig.chinese = _settings.imeChinese;
+    KeyboardConfig.candidates = _settings.imeCandidates;
+    KeyboardConfig.fuzzy = _settings.imeFuzzy;
+    KeyboardConfig.sentence = _settings.imeSentence;
+    KeyboardConfig.layout = _settings.imeLayout;
+    KeyboardConfig.global = _settings.imeGlobal;
   }
 
   /// Windows 专用：迁移数据目录并记住位置。

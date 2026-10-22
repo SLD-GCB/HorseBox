@@ -1,0 +1,16 @@
+内置输入法的词库由以下开源数据合并而成，仅做了格式转换（拼音去声调、
+合并同词、按词频排序），未改动词条内容：
+
+1. rime-pinyin-simp（https://github.com/rime/rime-pinyin-simp）
+   Apache License 2.0，原上游为 Android PinyinIME
+   —— 提供单字与常用词的拼音及词频。
+
+2. phrase-pinyin-data（https://github.com/mozillazg/phrase-pinyin-data）
+   MIT License
+   —— 提供成语、专有名词等词组的拼音。
+
+3. jieba 词典（https://github.com/fxsjy/jieba）
+   MIT License
+   —— 仅用于补充词频，决定候选排序；未复制其分词代码。
+
+最终词库约 10 万条，gzip 后约 1.2MB，随 App 离线分发。

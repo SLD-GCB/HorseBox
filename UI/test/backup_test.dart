@@ -20,6 +20,13 @@ void main() {
           {'id': 'h1'},
         ],
         'panel_credentials': [],
+        'theme_mode': 'light',
+        'accent': 0xFF3B82F6,
+        'ime_chinese': true,
+        'ime_layout': 'nine',
+        'ime_fuzzy': false,
+        'ime_sentence': true,
+        'ime_global': true,
       }),
     );
     final keyBytes = List<int>.generate(32, (i) => i);
@@ -39,6 +46,13 @@ void main() {
     expect(payload.profiles, 2);
     expect(payload.sshHosts, 1);
     expect(payload.files.containsKey('rules/a.srs'), isTrue);
+    // 4.2 之后新增的偏好也要能在备份清单里看到
+    expect(payload.themeMode, 'light');
+    expect(payload.accent, 0xFF3B82F6);
+    expect(payload.imeChinese, isTrue);
+    expect(payload.imeNine, isTrue);
+    expect(payload.imeFuzzy, isFalse);
+    expect(payload.imeGlobal, isTrue);
 
     await expectLater(
       BackupService.inspect(bytes: bytes, passphrase: 'wrongpass'),

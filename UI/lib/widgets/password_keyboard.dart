@@ -3,10 +3,34 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ime/pinyin_engine.dart';
 import 'masked_field.dart';
 
 /// 内置键盘的默认高度。宿主据此让页面让位。
-const double kPasswordKeyboardHeight = 240;
+const double kPasswordKeyboardHeight = 282;
+
+/// 内置键盘的可配置项，由设置页写入（AppState 初始化/保存时同步）。
+class KeyboardConfig {
+  KeyboardConfig._();
+
+  /// 打开键盘时默认中文输入。
+  static bool chinese = false;
+
+  /// 候选词数量。
+  static int candidates = 5;
+
+  /// 模糊音：zh/z、ch/c、sh/s 互通。
+  static bool fuzzy = true;
+
+  /// 整句切分（长拼音串自动分词）。
+  static bool sentence = true;
+
+  /// full = 全键盘，nine = 九宫格。
+  static String layout = 'full';
+
+  /// 全 App 使用内置键盘：不再提供切回系统输入法的入口。
+  static bool global = false;
+}
 
 /// 键盘的输出目标：原生输入框写 controller，WebView 走 JS。
 abstract class PasswordKeySink {
@@ -27,21 +51,27 @@ class PasswordKeyboard {
 
   static bool get isOpen => _session.value != null;
 
+  /// 当前正在接收输入的 sink；输入框用它判断自己是不是“活动的那一个”。
+  static PasswordKeySink? get activeSink => _session.value?.sink;
+
+  /// 键盘开关变化的监听，供输入框刷新光标/高亮。
+  static Listenable get changes => _session;
+
   static void show(
     PasswordKeySink sink, {
-    String title = '输入密码',
     double height = kPasswordKeyboardHeight,
     VoidCallback? onSystem,
     bool terminal = false,
     VoidCallback? onEnter,
+    bool? chinese,
   }) {
     _session.value = _KeySession(
       sink,
-      title,
       height,
       onSystem,
       terminal,
       onEnter,
+      chinese,
     );
   }
 
@@ -53,21 +83,23 @@ class PasswordKeyboard {
 class _KeySession {
   _KeySession(
     this.sink,
-    this.title,
     this.height,
     this.onSystem,
     this.terminal,
     this.onEnter,
+    this.chinese,
   );
 
   final PasswordKeySink sink;
-  final String title;
   final double height;
   final bool terminal;
   final VoidCallback? onEnter;
 
-  /// 非空时在键盘顶部显示「中文」按钮：切回系统输入法打中文。
+  /// 非空时在键盘顶部显示「⌨」按钮：切回系统输入法。
   final VoidCallback? onSystem;
+
+  /// 是否默认中文；null 表示跟随全局设置（密码框会显式传 false）。
+  final bool? chinese;
 }
 
 /// 把内置键盘固定在屏幕底部，并让整个 App（含弹窗）少掉这块高度，
@@ -163,7 +195,7 @@ class _ControllerSink extends PasswordKeySink {
 }
 
 /// 密码框：安卓上点一下打开内置键盘；桌面端有物理键盘，维持直接输入。
-class SecretField extends StatelessWidget {
+class SecretField extends StatefulWidget {
   const SecretField({
     super.key,
     required this.controller,
@@ -178,49 +210,115 @@ class SecretField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
 
   @override
+  State<SecretField> createState() => _SecretFieldState();
+}
+
+class _SecretFieldState extends State<SecretField> {
+  /// 固定一个 sink 实例：键盘靠它判断“当前输入的是哪个框”。
+  late final _ControllerSink _sink = _ControllerSink(widget.controller);
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (!Platform.isAndroid) {
       return TextField(
-        controller: controller,
+        controller: widget.controller,
         obscureText: false,
         autocorrect: true,
         enableSuggestions: true,
         keyboardType: TextInputType.text,
-        decoration: InputDecoration(labelText: label, hintText: hint),
-        onSubmitted: onSubmitted,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          hintText: widget.hint,
+        ),
+        onSubmitted: widget.onSubmitted,
       );
     }
     return ValueListenableBuilder<TextEditingValue>(
-      valueListenable: controller,
+      valueListenable: widget.controller,
       builder: (context, value, _) {
-        return InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => PasswordKeyboard.show(
-            _ControllerSink(controller),
-            title: label ?? '输入密码',
-            onEnter: onSubmitted == null
-                ? null
-                : () => onSubmitted!(controller.text),
-          ),
-          child: InputDecorator(
-            isEmpty: value.text.isEmpty,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: hint,
-              suffixIcon: Icon(
-                Icons.dialpad,
-                size: 18,
-                color: scheme.onSurfaceVariant,
+        return ListenableBuilder(
+          listenable: PasswordKeyboard.changes,
+          builder: (context, _) {
+            final active = identical(PasswordKeyboard.activeSink, _sink);
+            return InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => PasswordKeyboard.show(
+                _sink,
+
+                chinese: false,
+                onEnter: widget.onSubmitted == null
+                    ? null
+                    : () => widget.onSubmitted!(widget.controller.text),
               ),
-            ),
-            child: Text(
-              '•' * value.text.length,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, letterSpacing: 1.4),
-            ),
-          ),
+              child: InputDecorator(
+                isEmpty: value.text.isEmpty,
+                isFocused: active,
+                decoration: InputDecoration(
+                  labelText: widget.label,
+                  hintText: widget.hint,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: scheme.primary, width: 1.4),
+                  ),
+                  suffixIcon: Icon(
+                    Icons.dialpad,
+                    size: 18,
+                    color: active ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '•' * value.text.length,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, letterSpacing: 1.4),
+                    ),
+                    if (active) const _Caret(),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// 内置键盘打开时的闪烁光标：用户能看清正在往哪个框里输入。
+class _Caret extends StatefulWidget {
+  const _Caret();
+
+  @override
+  State<_Caret> createState() => _CaretState();
+}
+
+class _CaretState extends State<_Caret> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final on = _controller.value < 0.55;
+        return Container(
+          width: 1.6,
+          height: 16,
+          margin: const EdgeInsets.only(left: 2),
+          color: on ? color : color.withValues(alpha: 0),
         );
       },
     );
@@ -241,6 +339,110 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
   bool _shift = false;
   bool _symbols = false;
 
+  /// 中文模式：字母先攒进拼音缓冲，选候选项后才写进输入框。
+  bool _zh = false;
+  String _buffer = '';
+  List<String> _candidates = const [];
+  PinyinEngine? _engine;
+
+  @override
+  void initState() {
+    super.initState();
+    // 终端里默认英文，免得输入命令时被拼音拦一层。
+    _zh =
+        (widget.session.chinese ?? KeyboardConfig.chinese) &&
+        !widget.session.terminal;
+    if (_zh) _warmUp();
+  }
+
+  void _warmUp() {
+    if (_engine != null) return;
+    PinyinEngine.instance().then((engine) {
+      if (!mounted) return;
+      setState(() {
+        _engine = engine;
+        _candidates = _lookup(_buffer);
+      });
+    });
+  }
+
+  /// 九宫格按数字查，全键盘按拼音查。
+  List<String> _lookup(String buffer) {
+    final engine = _engine;
+    if (engine == null || buffer.isEmpty) return const [];
+    if (_nine) {
+      return engine.t9Candidates(buffer, limit: KeyboardConfig.candidates);
+    }
+    return engine.candidates(
+      buffer,
+      limit: KeyboardConfig.candidates,
+      fuzzy: KeyboardConfig.fuzzy,
+      sentence: KeyboardConfig.sentence,
+    );
+  }
+
+  bool get _nine => KeyboardConfig.layout == 'nine' && _zh;
+
+  void _type(String text) {
+    if (!_zh) {
+      _sink.insert(text);
+      return;
+    }
+    setState(() {
+      _buffer += text;
+      _candidates = _lookup(_buffer);
+    });
+  }
+
+  void _commit(String word) {
+    if (word.isEmpty) return;
+    _sink.insert(word);
+    setState(() {
+      _buffer = '';
+      _candidates = const [];
+    });
+  }
+
+  void _backspace() {
+    if (_zh && _buffer.isNotEmpty) {
+      setState(() {
+        _buffer = _buffer.substring(0, _buffer.length - 1);
+        _candidates = _lookup(_buffer);
+      });
+      return;
+    }
+    _sink.backspace();
+  }
+
+  void _space() {
+    if (_zh && _buffer.isNotEmpty) {
+      _commit(_candidates.isNotEmpty ? _candidates.first : _buffer);
+      return;
+    }
+    _sink.insert(' ');
+  }
+
+  /// 切到英文前先把拼音落进输入框，避免丢字。
+  void _commitPending() {
+    if (!_zh || _buffer.isEmpty) return;
+    _sink.insert(_candidates.isNotEmpty ? _candidates.first : _buffer);
+    setState(() {
+      _buffer = '';
+      _candidates = const [];
+    });
+  }
+
+  void _toggleLang() {
+    if (_zh) _commitPending();
+    setState(() {
+      _zh = !_zh;
+      _buffer = '';
+      _candidates = const [];
+      _shift = false;
+    });
+    if (_zh) _warmUp();
+  }
+
   PasswordKeySink get _sink => widget.session.sink;
 
   static const _digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
@@ -253,18 +455,13 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
   static const _sym3 = ["'", '"', ',', '.', '/', '\\', '|', '<', '>', '?'];
   static const _sym4 = ['~', '`', '€', '£', '¥', '§', '°', '±', '×', '÷'];
 
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text ?? '';
-    if (text.isNotEmpty) _sink.paste(text);
-  }
-
   Widget _key(
     String label, {
     VoidCallback? onTap,
     int flex = 1,
     bool accent = false,
     double fontSize = 15,
+    Widget? child,
   }) {
     return Expanded(
       flex: flex,
@@ -277,10 +474,12 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
             borderRadius: BorderRadius.circular(6),
             onTap: onTap,
             child: Center(
-              child: Text(
-                label,
-                style: TextStyle(fontSize: fontSize, color: Colors.white),
-              ),
+              child:
+                  child ??
+                  Text(
+                    label,
+                    style: TextStyle(fontSize: fontSize, color: Colors.white),
+                  ),
             ),
           ),
         ),
@@ -289,11 +488,14 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
   }
 
   Widget _letter(String char) {
+    if (_zh) {
+      return _key(char, onTap: () => _type(char));
+    }
     final label = _shift ? char.toUpperCase() : char;
     return _key(
       label,
       onTap: () {
-        _sink.insert(label);
+        _type(label);
         if (_shift) setState(() => _shift = false);
       },
     );
@@ -306,12 +508,61 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
     ),
   );
 
+  /// 九宫格：3×4，按数字查库，只用于中文。
+  List<Widget> _nineRows() {
+    const keys = <(String, String)>[
+      ('1', '.,?!'),
+      ('2', 'abc'),
+      ('3', 'def'),
+      ('4', 'ghi'),
+      ('5', 'jkl'),
+      ('6', 'mno'),
+      ('7', 'pqrs'),
+      ('8', 'tuv'),
+      ('9', 'wxyz'),
+    ];
+    Widget cell((String, String) item) {
+      return _key(
+        '',
+        onTap: () => _type(item.$1),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              item.$1,
+              style: const TextStyle(fontSize: 18, color: Colors.white),
+            ),
+            Text(
+              item.$2,
+              style: const TextStyle(fontSize: 9, color: Colors.white54),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return [
+      _row(keys.take(3).map(cell).toList()),
+      _row(keys.skip(3).take(3).map(cell).toList()),
+      _row(keys.skip(6).take(3).map(cell).toList()),
+      _row([
+        _key(
+          '?123',
+          flex: 2,
+          fontSize: 13,
+          onTap: () => setState(() => _symbols = true),
+        ),
+        _key('空格', flex: 4, fontSize: 13, onTap: _space),
+        _key('⌫', flex: 2, onTap: _backspace),
+        _key('完成', flex: 2, accent: true, fontSize: 13, onTap: widget.onClose),
+      ]),
+    ];
+  }
+
   List<Widget> _letterRows() {
     return [
       _row(
-        _digits
-            .map((item) => _key(item, onTap: () => _sink.insert(item)))
-            .toList(),
+        _digits.map((item) => _key(item, onTap: () => _type(item))).toList(),
       ),
       _row(_rowQ.map(_letter).toList()),
       _row(_rowA.map(_letter).toList(), horizontal: 15),
@@ -323,7 +574,7 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
           onTap: () => setState(() => _shift = !_shift),
         ),
         ..._rowZ.map(_letter),
-        _key('⌫', flex: 2, onTap: _sink.backspace),
+        _key('⌫', flex: 2, onTap: _backspace),
       ]),
       _row([
         _key(
@@ -332,15 +583,24 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
           fontSize: 13,
           onTap: () => setState(() => _symbols = true),
         ),
-        _key('空格', flex: 5, fontSize: 13, onTap: () => _sink.insert(' ')),
+        _key('空格', flex: 5, fontSize: 13, onTap: _space),
         if (widget.session.terminal)
-          _key('↵', flex: 2, fontSize: 15, onTap: () => _sink.insert('\r'))
+          _key(
+            '↵',
+            flex: 2,
+            fontSize: 15,
+            onTap: () {
+              _commitPending();
+              _sink.insert('\r');
+            },
+          )
         else if (widget.session.onEnter != null)
           _key(
             '↵',
             flex: 2,
             fontSize: 15,
             onTap: () {
+              _commitPending();
               final enter = widget.session.onEnter!;
               widget.onClose();
               enter();
@@ -366,16 +626,25 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
           fontSize: 13,
           onTap: () => setState(() => _symbols = false),
         ),
-        _key('空格', flex: 4, fontSize: 13, onTap: () => _sink.insert(' ')),
-        _key('⌫', flex: 2, onTap: _sink.backspace),
+        _key('空格', flex: 4, fontSize: 13, onTap: _space),
+        _key('⌫', flex: 2, onTap: _backspace),
         if (widget.session.terminal)
-          _key('↵', flex: 2, fontSize: 15, onTap: () => _sink.insert('\r'))
+          _key(
+            '↵',
+            flex: 2,
+            fontSize: 15,
+            onTap: () {
+              _commitPending();
+              _sink.insert('\r');
+            },
+          )
         else if (widget.session.onEnter != null)
           _key(
             '↵',
             flex: 2,
             fontSize: 15,
             onTap: () {
+              _commitPending();
               final enter = widget.session.onEnter!;
               widget.onClose();
               enter();
@@ -386,6 +655,80 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
     ];
   }
 
+  Widget _candidateBar() {
+    if (!_zh) {
+      return Container(
+        height: 36,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: const Text(
+          '英文输入 · 点左侧「中」切到拼音',
+          style: TextStyle(fontSize: 11, color: Colors.white38),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 36,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              _buffer.isEmpty ? '拼音' : _buffer,
+              style: const TextStyle(fontSize: 12.5, color: Colors.white70),
+            ),
+          ),
+          Expanded(
+            child: _candidates.isEmpty
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _engine == null
+                          ? '词库加载中…'
+                          : (_buffer.isEmpty ? '输入拼音选词' : '没有候选，空格直接上屏'),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white38,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    itemCount: _candidates.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 6),
+                    itemBuilder: (context, index) {
+                      final word = _candidates[index];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () {
+                          _commit(word);
+                        },
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3A3A3C),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            word,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -394,12 +737,22 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
           height: 34,
           child: Row(
             children: [
-              const SizedBox(width: 12),
-              Text(
-                widget.session.title,
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
-              ),
               const Spacer(),
+              TextButton(
+                onPressed: _toggleLang,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  _zh ? '中' : '英',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _zh ? const Color(0xFF60A5FA) : Colors.white70,
+                  ),
+                ),
+              ),
               if (widget.session.onSystem != null)
                 TextButton(
                   onPressed: () {
@@ -412,17 +765,8 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
                     minimumSize: const Size(0, 30),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('中文', style: TextStyle(fontSize: 12)),
+                  child: const Text('⌨', style: TextStyle(fontSize: 13)),
                 ),
-              TextButton(
-                onPressed: _paste,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('粘贴', style: TextStyle(fontSize: 12)),
-              ),
               TextButton(
                 onPressed: _sink.clear,
                 style: TextButton.styleFrom(
@@ -445,8 +789,13 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
             ],
           ),
         ),
+        _candidateBar(),
         Expanded(
-          child: Column(children: _symbols ? _symbolRows() : _letterRows()),
+          child: Column(
+            children: _symbols
+                ? _symbolRows()
+                : (_nine ? _nineRows() : _letterRows()),
+          ),
         ),
         SizedBox(height: MediaQuery.viewPaddingOf(context).bottom),
       ],
@@ -480,6 +829,7 @@ class KeyField extends StatefulWidget {
 
 class _KeyFieldState extends State<KeyField> {
   final FocusNode _focus = FocusNode();
+  late final _ControllerSink _sink = _ControllerSink(widget.controller);
   bool _system = false;
 
   /// 切系统输入法时我们会先失焦再聚焦，这期间不能被当成“用户收起了键盘”。
@@ -507,29 +857,34 @@ class _KeyFieldState extends State<KeyField> {
   }
 
   void _openBuiltIn() {
+    _focus.requestFocus();
     PasswordKeyboard.show(
-      _ControllerSink(widget.controller),
-      title: widget.label ?? '输入',
+      _sink,
+
       onEnter: widget.onSubmitted == null
           ? null
           : () => widget.onSubmitted!(widget.controller.text),
-      onSystem: () {
-        if (!mounted) return;
-        setState(() {
-          _switching = true;
-          _system = true;
-        });
-        // 已经有焦点时 requestFocus 不会重新拉起输入法，先失焦再聚焦；
-        // 这期间 _switching 挡住焦点监听，避免又把 _system 复位。
-        _focus.unfocus();
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          if (!mounted) return;
-          _focus.requestFocus();
-          // 个别机型在 readOnly 刚放开时不会自动弹键盘，显式再要一次。
-          await SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-          if (mounted) setState(() => _switching = false);
-        });
-      },
+      onSystem: KeyboardConfig.global
+          ? null
+          : () {
+              if (!mounted) return;
+              setState(() {
+                _switching = true;
+                _system = true;
+              });
+              // 已经有焦点时 requestFocus 不会重新拉起输入法，先失焦再聚焦；
+              // 这期间 _switching 挡住焦点监听，避免又把 _system 复位。
+              _focus.unfocus();
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!mounted) return;
+                _focus.requestFocus();
+                // 个别机型在 readOnly 刚放开时不会自动弹键盘，显式再要一次。
+                await SystemChannels.textInput.invokeMethod<void>(
+                  'TextInput.show',
+                );
+                if (mounted) setState(() => _switching = false);
+              });
+            },
     );
   }
 
@@ -548,36 +903,62 @@ class _KeyFieldState extends State<KeyField> {
         ),
       );
     }
-    return TextField(
-      controller: widget.controller,
-      focusNode: _focus,
-      readOnly: !_system,
-      keyboardType: widget.keyboardType ?? TextInputType.text,
-      textInputAction: TextInputAction.done,
-      onTap: () {
-        if (_system) return;
-        _openBuiltIn();
-      },
-      onSubmitted: widget.onSubmitted,
-      decoration: InputDecoration(
-        labelText: widget.label,
-        hintText: widget.hint,
-        suffixIcon: _system
-            ? IconButton(
-                tooltip: '用内置键盘',
-                onPressed: () {
-                  setState(() => _system = false);
-                  _focus.unfocus();
-                  _openBuiltIn();
-                },
-                icon: Icon(
-                  Icons.dialpad,
-                  size: 18,
-                  color: scheme.onSurfaceVariant,
+    // 内置键盘模式下用 TextInputType.none 压住系统输入法，
+    // 同时保持可编辑，光标（caret）才能显示出来。
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, _) {
+        return ListenableBuilder(
+          listenable: PasswordKeyboard.changes,
+          builder: (context, _) {
+            final active = identical(PasswordKeyboard.activeSink, _sink);
+            return TextField(
+              controller: widget.controller,
+              focusNode: _focus,
+              keyboardType: _system
+                  ? (widget.keyboardType ?? TextInputType.text)
+                  : TextInputType.none,
+              textInputAction: TextInputAction.done,
+              showCursor: true,
+              cursorWidth: 1.6,
+              onTap: () {
+                if (_system) return;
+                _openBuiltIn();
+              },
+              onSubmitted: widget.onSubmitted,
+              decoration: InputDecoration(
+                labelText: widget.label,
+                hintText: widget.hint,
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: scheme.primary, width: 1.4),
                 ),
-              )
-            : Icon(Icons.dialpad, size: 18, color: scheme.onSurfaceVariant),
-      ),
+                suffixIcon: _system
+                    ? IconButton(
+                        tooltip: '用内置键盘',
+                        onPressed: () {
+                          setState(() => _system = false);
+                          _focus.unfocus();
+                          _openBuiltIn();
+                        },
+                        icon: Icon(
+                          Icons.dialpad,
+                          size: 18,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      )
+                    : Icon(
+                        Icons.dialpad,
+                        size: 18,
+                        color: active
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

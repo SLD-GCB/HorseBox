@@ -54,8 +54,8 @@ class _BackupPageState extends State<BackupPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '包含订阅、SSH 主机、密码本、全部设置和规则；不包含内核、日志。'
-                  '备份文件用你设置的口令加密，可以放到任何位置。',
+                  '包含订阅、SSH 主机、密码本、规则，以及全部设置（主题色、输入法偏好、DNS、分流等）；'
+                  '不包含内核和日志。备份文件用你设置的口令加密，可以放到任何位置。',
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.5,
@@ -266,8 +266,13 @@ class _BackupPageState extends State<BackupPage> {
                 '${payload.credentials} 条密码本记录。',
                 style: const TextStyle(fontSize: 12, height: 1.6),
               ),
+              const SizedBox(height: 8),
+              Text(
+                '包含偏好：${_preferenceLabel(payload)}',
+                style: const TextStyle(fontSize: 11.5),
+              ),
               if (created != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
                   '备份时间：${created.toLocal()}',
                   style: const TextStyle(fontSize: 11.5),
@@ -293,6 +298,24 @@ class _BackupPageState extends State<BackupPage> {
         ],
       ),
     );
+  }
+
+  /// 把备份里的偏好拼成一句话，恢复前让用户确认带过来的是什么。
+  String _preferenceLabel(BackupPayload payload) {
+    final parts = <String>[
+      switch (payload.themeMode) {
+        'light' => '浅色主题',
+        'system' => '跟随系统主题',
+        _ => '深色主题',
+      },
+      '自定义主色',
+      payload.imeChinese ? '中文输入' : '英文输入',
+      payload.imeNine ? '九宫格' : '全键盘',
+    ];
+    if (payload.imeFuzzy) parts.add('模糊音');
+    if (payload.imeSentence) parts.add('整句联想');
+    if (payload.imeGlobal) parts.add('全 App 内置键盘');
+    return parts.join(' · ');
   }
 
   Future<void> _finishAndExit() async {

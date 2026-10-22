@@ -7,6 +7,7 @@ import '../widgets/section.dart';
 import 'backup_page.dart';
 import 'settings_appearance_page.dart';
 import 'settings_core_page.dart';
+import 'settings_ime_page.dart';
 import 'settings_proxy_page.dart';
 import 'settings_rules_page.dart';
 
@@ -75,6 +76,15 @@ class SettingsPage extends StatelessWidget {
               subtitle: _appearanceLabel(),
               accent: Color(state.settings.accent),
               onTap: () => _open(context, SettingsAppearancePage(state: state)),
+            ),
+            const SizedBox(height: 10),
+            _EntryCard(
+              icon: Icons.keyboard_alt_outlined,
+              title: '内置输入法',
+              subtitle: state.settings.imeChinese
+                  ? '默认中文 · @@{state.settings.imeCandidates} 个候选'
+                  : '默认英文 · 可在键盘上切中文',
+              onTap: () => _open(context, SettingsImePage(state: state)),
             ),
             const SizedBox(height: 10),
             _EntryCard(

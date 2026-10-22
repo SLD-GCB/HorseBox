@@ -21,11 +21,15 @@ class BackupPayload {
   BackupPayload({
     required this.files,
     required this.counts,
+    required this.preferences,
     required this.created,
   });
 
   final Map<String, List<int>> files;
   final Map<String, int> counts;
+
+  /// 关键偏好（主题、输入法等），只为恢复前给用户看清楚，恢复本身靠 settings.json。
+  final Map<String, dynamic> preferences;
   final DateTime? created;
 
   int get profiles => counts['profiles'] ?? 0;
@@ -33,6 +37,20 @@ class BackupPayload {
   int get sshHosts => counts['ssh_hosts'] ?? 0;
 
   int get credentials => counts['panel_credentials'] ?? 0;
+
+  String get themeMode => preferences['theme_mode'] as String? ?? 'dark';
+
+  int get accent => (preferences['accent'] as num?)?.toInt() ?? 0xFF4C8F6F;
+
+  bool get imeChinese => preferences['ime_chinese'] as bool? ?? false;
+
+  bool get imeFuzzy => preferences['ime_fuzzy'] as bool? ?? true;
+
+  bool get imeSentence => preferences['ime_sentence'] as bool? ?? true;
+
+  bool get imeGlobal => preferences['ime_global'] as bool? ?? false;
+
+  bool get imeNine => preferences['ime_layout'] == 'nine';
 }
 
 /// 整包备份：settings.json + secret.key + rules/，用口令重新加密后写成一个文件。
@@ -80,6 +98,7 @@ class BackupService {
       'format': _version,
       'created': DateTime.now().toIso8601String(),
       'counts': _counts(files['settings.json']!),
+      'preferences': _preferences(files['settings.json']!),
       'entries': [
         for (final entry in files.entries)
           {'path': entry.key, 'data': base64Encode(entry.value)},
@@ -121,9 +140,13 @@ class BackupService {
         if (value is num) counts['${entry.key}'] = value.toInt();
       }
     }
+    final rawPreferences = decoded['preferences'];
     return BackupPayload(
       files: files,
       counts: counts,
+      preferences: rawPreferences is Map
+          ? Map<String, dynamic>.from(rawPreferences)
+          : const {},
       created: DateTime.tryParse(decoded['created'] as String? ?? ''),
     );
   }
@@ -298,6 +321,25 @@ class BackupService {
       if (part.isEmpty || part == '.' || part == '..') return false;
     }
     return true;
+  }
+
+  /// 挑出几项用户能直观理解的偏好，导出时写进清单，恢复前展示。
+  static Map<String, dynamic> _preferences(List<int> settingsBytes) {
+    try {
+      final decoded = jsonDecode(utf8.decode(settingsBytes));
+      if (decoded is! Map) return const {};
+      return {
+        'theme_mode': decoded['theme_mode'],
+        'accent': decoded['accent'],
+        'ime_chinese': decoded['ime_chinese'],
+        'ime_layout': decoded['ime_layout'],
+        'ime_fuzzy': decoded['ime_fuzzy'],
+        'ime_sentence': decoded['ime_sentence'],
+        'ime_global': decoded['ime_global'],
+      };
+    } catch (_) {
+      return const {};
+    }
   }
 
   static Map<String, int> _counts(List<int> settingsBytes) {

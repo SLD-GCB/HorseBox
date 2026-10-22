@@ -21,7 +21,6 @@ dependencies:
   path_provider: ^2.1.6
   cryptography: ^2.9.0
   desktop_drop: ^0.8.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -32,3 +31,6 @@ flutter:
   assets:
     - assets/rules/geosite-cn.srs
     - assets/rules/geoip-cn.srs
+    - assets/ime/pinyin.tsv.gz
+    - assets/ime/syllables.txt
+    - assets/ime/NOTICE.txt

@@ -143,6 +143,8 @@ if errorlevel 1 (
 )
 
 set "ZIP=%DIST%\HorseBox-%VER%-windows-x64.zip"
+rem 拼音词库只给安卓内置键盘用，Windows 包里没意义，打包前剔掉
+if exist "%UI%\build\windows\x64\runner\Release\data\flutter_assets\assets\ime" rmdir /s /q "%UI%\build\windows\x64\runner\Release\data\flutter_assets\assets\ime"
 if exist "%ZIP%" del /f /q "%ZIP%" >nul
 "%PS%" -NoProfile -Command "Compress-Archive -Path '%UI%\build\windows\x64\runner\Release\*' -DestinationPath '%ZIP%' -Force"
 if errorlevel 1 (

@@ -67,6 +67,12 @@ class AppSettings {
     this.certPin = '',
     this.themeMode = 'dark',
     this.accent = 0xFF4C8F6F,
+    this.imeChinese = false,
+    this.imeCandidates = 5,
+    this.imeFuzzy = true,
+    this.imeSentence = true,
+    this.imeLayout = 'full',
+    this.imeGlobal = false,
     this.autoConnect = false,
     this.logLimit = 800,
     this.panelUrl = '',
@@ -106,6 +112,18 @@ class AppSettings {
 
   /// 主题主色（ARGB），用户可以在「外观」里自定义。
   final int accent;
+
+  /// 内置键盘：默认中文、候选数量、震动、按键音。
+  final bool imeChinese;
+  final int imeCandidates;
+
+  /// 模糊音（zh/z、ch/c、sh/s）、整句切分、键盘布局（full / nine）。
+  final bool imeFuzzy;
+  final bool imeSentence;
+  final String imeLayout;
+
+  /// 全 App 使用内置键盘（不再切回系统输入法）。
+  final bool imeGlobal;
   final bool autoConnect;
   final int logLimit;
 
@@ -131,6 +149,12 @@ class AppSettings {
     String? certPin,
     String? themeMode,
     int? accent,
+    bool? imeChinese,
+    int? imeCandidates,
+    bool? imeFuzzy,
+    bool? imeSentence,
+    String? imeLayout,
+    bool? imeGlobal,
     bool? autoConnect,
     int? logLimit,
     String? panelUrl,
@@ -154,6 +178,12 @@ class AppSettings {
       certPin: certPin ?? this.certPin,
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
+      imeChinese: imeChinese ?? this.imeChinese,
+      imeCandidates: imeCandidates ?? this.imeCandidates,
+      imeFuzzy: imeFuzzy ?? this.imeFuzzy,
+      imeSentence: imeSentence ?? this.imeSentence,
+      imeLayout: imeLayout ?? this.imeLayout,
+      imeGlobal: imeGlobal ?? this.imeGlobal,
       autoConnect: autoConnect ?? this.autoConnect,
       logLimit: logLimit ?? this.logLimit,
       panelUrl: panelUrl ?? this.panelUrl,
@@ -179,6 +209,12 @@ class AppSettings {
     'cert_pin': certPin,
     'theme_mode': themeMode,
     'accent': accent,
+    'ime_chinese': imeChinese,
+    'ime_candidates': imeCandidates,
+    'ime_fuzzy': imeFuzzy,
+    'ime_sentence': imeSentence,
+    'ime_layout': imeLayout,
+    'ime_global': imeGlobal,
     'auto_connect': autoConnect,
     'log_limit': logLimit,
     'panel_url': panelUrl,
@@ -234,6 +270,12 @@ class AppSettings {
       certPin: json['cert_pin'] as String? ?? '',
       themeMode: json['theme_mode'] as String? ?? 'dark',
       accent: (json['accent'] as num?)?.toInt() ?? 0xFF4C8F6F,
+      imeChinese: json['ime_chinese'] as bool? ?? false,
+      imeCandidates: (json['ime_candidates'] as num?)?.toInt() ?? 5,
+      imeFuzzy: json['ime_fuzzy'] as bool? ?? true,
+      imeSentence: json['ime_sentence'] as bool? ?? true,
+      imeLayout: json['ime_layout'] as String? ?? 'full',
+      imeGlobal: json['ime_global'] as bool? ?? false,
       autoConnect: json['auto_connect'] as bool? ?? false,
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
       panelUrl: json['panel_url'] as String? ?? '',

@@ -317,12 +317,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   }
 
   void _openKeypad() {
-    PasswordKeyboard.show(
-      _TerminalSink(this),
-      title: '终端',
-      height: 240,
-      terminal: true,
-    );
+    PasswordKeyboard.show(_TerminalSink(this), height: 240, terminal: true);
   }
 
   Future<void> _openMenu(Offset global) async {
