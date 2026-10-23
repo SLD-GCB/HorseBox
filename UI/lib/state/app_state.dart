@@ -628,6 +628,9 @@ class AppState extends ChangeNotifier {
     _notify();
   }
 
+  /// 设置页打开时调用：把当前设置重新推给输入法，纠正可能过期的原生状态。
+  void syncKeyboardConfig() => _applyKeyboardConfig();
+
   /// 把输入法相关设置同步给内置键盘（键盘是全局单例，拿不到 state），
   /// 同时推给原生系统输入法——它跑在 IME 窗口里，读不到这里的 settings。
   void _applyKeyboardConfig() {

@@ -35,6 +35,8 @@ class _SettingsImePageState extends State<SettingsImePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 每次进这一页都把当前设置推一遍，避免原生那边留着旧配色。
+    widget.state.syncKeyboardConfig();
     _refresh();
   }
 

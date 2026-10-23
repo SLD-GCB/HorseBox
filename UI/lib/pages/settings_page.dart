@@ -7,6 +7,7 @@ import '../widgets/section.dart';
 import 'backup_page.dart';
 import 'settings_appearance_page.dart';
 import 'settings_core_page.dart';
+import 'settings_save_page.dart';
 import 'settings_ime_page.dart';
 import 'settings_proxy_page.dart';
 import 'settings_rules_page.dart';
@@ -106,6 +107,13 @@ class SettingsPage extends StatelessWidget {
               title: Platform.isAndroid ? '内核与后台' : '内核',
               subtitle: _coreLabel(),
               onTap: () => _open(context, SettingsCorePage(state: state)),
+            ),
+            const SizedBox(height: 10),
+            _EntryCard(
+              icon: Icons.save_outlined,
+              title: '保存设置',
+              subtitle: '把当前所有设置写盘，并同步给系统输入法',
+              onTap: () => _open(context, SettingsSavePage(state: state)),
             ),
             const SizedBox(height: 10),
             _EntryCard(
