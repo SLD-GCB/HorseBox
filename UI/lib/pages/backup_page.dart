@@ -315,6 +315,12 @@ class _BackupPageState extends State<BackupPage> {
     if (payload.imeFuzzy) parts.add('模糊音');
     if (payload.imeSentence) parts.add('整句联想');
     if (payload.imeGlobal) parts.add('全 App 内置键盘');
+    parts.add(payload.imeDarkMode == 'system' ? '键盘跟随系统' : '键盘跟随 App');
+    parts.add(payload.imeBuiltin ? '内置键盘开' : '内置键盘关');
+    if (payload.imeCustomPalette) parts.add('自定义键盘配色');
+    if (payload.imeAutocorrect) parts.add('英文纠错');
+    if (payload.imeSound) parts.add('按键音');
+    if (payload.imeVibrate) parts.add('按键震动');
     return parts.join(' · ');
   }
 

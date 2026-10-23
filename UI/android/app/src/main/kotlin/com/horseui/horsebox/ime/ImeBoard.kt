@@ -241,7 +241,8 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             text = label
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-            setTextColor(if (active) accentColor() else palette.label)
+            setTextColor(if (active) emphasisColor() else palette.label)
+            if (active) setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(9), 0, dp(9), 0)
             isClickable = true
             background = pressHighlight()
@@ -303,7 +304,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 TextView(context).apply {
                     text = enBuffer.toString()
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    setTextColor(accentColor())
+                    setTextColor(emphasisColor())
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(14), 0, dp(10), 0)
                 },
@@ -326,7 +327,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         val pinyin = TextView(context).apply {
             text = pinyinLabel()
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(if (buffer.isEmpty()) palette.hint else accentColor())
+            setTextColor(if (buffer.isEmpty()) palette.hint else emphasisColor())
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), 0, dp(12), 0)
             isClickable = true
@@ -493,7 +494,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             text = word
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_SP, if (first) 18f else 17f)
-            setTextColor(if (first) accentColor() else palette.label)
+            setTextColor(if (first) emphasisColor() else palette.label)
             if (first) setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(10), 0, dp(10), 0)
             isClickable = true
@@ -521,7 +522,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 text = displayText(item.word)
                 gravity = Gravity.CENTER
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, if (first) 18f else 17f)
-            setTextColor(if (first) accentColor() else Color.WHITE)
+            setTextColor(if (first) emphasisColor() else palette.label)
             if (first) setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(10), 0, dp(10), 0)
             isClickable = true
@@ -988,7 +989,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     private fun highlightMark(index: Int) {
         markItems.forEachIndexed { position, item ->
             val active = position == index
-            item.setTextColor(if (active) accentColor() else palette.label)
+            item.setTextColor(if (active) emphasisColor() else palette.label)
             item.setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
         }
     }
@@ -1437,6 +1438,15 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         RippleDrawable(ColorStateList.valueOf(palette.ripple), null, null)
 
     private fun accentColor(): Int = ImeTheme.accent(context)
+
+    /**
+     * 强调文字（首候选、激活的中/英、拼音提示）的颜色。
+     *
+     * 自定义整套配色时用用户选的文字色——否则会和文字色不一致，
+     * 看起来像"某个字没跟上主题"。
+     */
+    private fun emphasisColor(): Int =
+        if (ImePrefs.customPalette) palette.label else accentColor()
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density + 0.5f).toInt()

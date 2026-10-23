@@ -50,6 +50,20 @@ class BackupPayload {
 
   bool get imeGlobal => preferences['ime_global'] as bool? ?? false;
 
+  bool get imeBuiltin => preferences['ime_builtin'] as bool? ?? true;
+
+  bool get imeAutocorrect => preferences['ime_autocorrect'] as bool? ?? true;
+
+  bool get imeSound => preferences['ime_sound'] as bool? ?? false;
+
+  bool get imeVibrate => preferences['ime_vibrate'] as bool? ?? true;
+
+  bool get imeCustomPalette =>
+      preferences['ime_custom_palette'] as bool? ?? false;
+
+  /// 键盘明暗：app / system。
+  String get imeDarkMode => preferences['ime_dark_mode'] as String? ?? 'app';
+
   bool get imeNine => preferences['ime_layout'] == 'nine';
 }
 
@@ -350,6 +364,13 @@ class BackupService {
         'ime_fuzzy': decoded['ime_fuzzy'],
         'ime_sentence': decoded['ime_sentence'],
         'ime_global': decoded['ime_global'],
+        'ime_builtin': decoded['ime_builtin'],
+        'ime_dark_mode': decoded['ime_dark_mode'],
+        'ime_accent_mode': decoded['ime_accent_mode'],
+        'ime_custom_palette': decoded['ime_custom_palette'],
+        'ime_autocorrect': decoded['ime_autocorrect'],
+        'ime_sound': decoded['ime_sound'],
+        'ime_vibrate': decoded['ime_vibrate'],
       };
     } catch (_) {
       return const {};
