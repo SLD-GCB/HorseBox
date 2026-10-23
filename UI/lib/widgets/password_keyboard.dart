@@ -139,7 +139,9 @@ class PasswordKeyboardHost extends StatelessWidget {
                   bottom: 0,
                   height: session.height,
                   child: Material(
-                    color: const Color(0xFF252526),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF1B1C1E)
+                        : const Color(0xFFEDEEF0),
                     child: _PasswordKeypad(
                       session: session,
                       onClose: PasswordKeyboard.hide,
@@ -362,6 +364,11 @@ class _PasswordKeypad extends StatefulWidget {
 }
 
 class _PasswordKeypadState extends State<_PasswordKeypad> {
+  // 跟随 App 主题的配色（深色/浅色 + 主色）。
+  Color _keyColor = const Color(0xFF3A3A3C);
+  Color _label = Colors.white;
+  Color _hint = Colors.white38;
+  Color _accent = const Color(0xFF2563EB);
   bool _shift = false;
   bool _symbols = false;
 
@@ -494,7 +501,7 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: Material(
-          color: accent ? const Color(0xFF2563EB) : const Color(0xFF3A3A3C),
+          color: accent ? _accent : _keyColor,
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
@@ -509,7 +516,10 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
                   child ??
                   Text(
                     label,
-                    style: TextStyle(fontSize: fontSize, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      color: accent ? Colors.white : _label,
+                    ),
                   ),
             ),
           ),
@@ -559,14 +569,8 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              item.$1,
-              style: const TextStyle(fontSize: 18, color: Colors.white),
-            ),
-            Text(
-              item.$2,
-              style: const TextStyle(fontSize: 9, color: Colors.white54),
-            ),
+            Text(item.$1, style: TextStyle(fontSize: 18, color: _label)),
+            Text(item.$2, style: TextStyle(fontSize: 9, color: _hint)),
           ],
         ),
       );
@@ -692,9 +696,9 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
         height: 36,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: const Text(
+        child: Text(
           '英文输入 · 点左侧「中」切到拼音',
-          style: TextStyle(fontSize: 11, color: Colors.white38),
+          style: TextStyle(fontSize: 11, color: _hint),
         ),
       );
     }
@@ -706,7 +710,10 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               _buffer.isEmpty ? '拼音' : _buffer,
-              style: const TextStyle(fontSize: 12.5, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: _label.withValues(alpha: 0.72),
+              ),
             ),
           ),
           Expanded(
@@ -740,15 +747,12 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
                           alignment: Alignment.center,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3A3A3C),
+                            color: _keyColor,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             word,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: Colors.white,
-                            ),
+                            style: TextStyle(fontSize: 15, color: _label),
                           ),
                         ),
                       );
@@ -762,6 +766,12 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    _keyColor = dark ? const Color(0xFF35373C) : Colors.white;
+    _label = dark ? const Color(0xFFEDEDEF) : const Color(0xFF1B1C1E);
+    _hint = _label.withValues(alpha: 0.55);
+    _accent = scheme.primary;
     return Column(
       children: [
         SizedBox(
@@ -780,7 +790,7 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
                   _zh ? '中' : '英',
                   style: TextStyle(
                     fontSize: 12,
-                    color: _zh ? const Color(0xFF60A5FA) : Colors.white70,
+                    color: _zh ? _accent : _label.withValues(alpha: 0.72),
                   ),
                 ),
               ),
