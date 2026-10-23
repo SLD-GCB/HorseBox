@@ -141,6 +141,12 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         build()
     }
 
+    /** 系统深浅色变了：重新取一次配色并整体重建，背景立刻跟上。 */
+    fun applyTheme() {
+        palette = ImeTheme.palette(context)
+        build()
+    }
+
     /** 词库后台加载完成后由 Service 调回来。 */
     fun onEngineReady() {
         if (buffer.isNotEmpty()) refreshCandidates()

@@ -1,6 +1,7 @@
 package com.horseui.horsebox.ime
 
 import android.content.Context
+import android.content.res.Configuration
 import android.inputmethodservice.InputMethodService
 import android.text.InputType
 import android.view.View
@@ -70,6 +71,13 @@ class HorseImeService : InputMethodService(), ImeBoard.Host {
     override fun onDestroy() {
         ImeLearning.flush()
         super.onDestroy()
+    }
+
+    /** 系统切换深色/浅色时，键盘立刻换配色，不用等下一次弹出。 */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ImePrefs.load(this)
+        board?.applyTheme()
     }
 
     /** 横屏也不切全屏提取模式：键盘始终是固定高度的一条。 */
