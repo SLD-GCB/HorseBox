@@ -289,6 +289,7 @@ class _PanelPageState extends State<PanelPage> {
     final web = _web;
     if (web == null) return;
     // 面板页的键盘压短一点，别把登录卡片挡死。
+    if (!KeyboardConfig.builtin.value) return;
     PasswordKeyboard.show(_WebKeySink(web), height: 200);
   }
 

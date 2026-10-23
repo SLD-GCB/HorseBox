@@ -26,6 +26,9 @@ class KeyboardConfig {
   /// 整句切分（长拼音串自动分词）。
   static bool sentence = true;
 
+  /// 是否启用内置键盘；关掉后 App 内输入框改用系统输入法。
+  static final ValueNotifier<bool> builtin = ValueNotifier<bool>(true);
+
   /// full = 全键盘，nine = 九宫格。
   static String layout = 'full';
 
@@ -220,6 +223,28 @@ class _SecretFieldState extends State<SecretField> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: KeyboardConfig.builtin,
+      builder: (context, builtin, _) {
+        if (Platform.isAndroid && !builtin) {
+          // 关掉内置键盘时密码框也走系统输入法。
+          return TextField(
+            controller: widget.controller,
+            obscureText: true,
+            keyboardType: TextInputType.text,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              hintText: widget.hint,
+            ),
+            onSubmitted: widget.onSubmitted,
+          );
+        }
+        return _buildBody(context);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (!Platform.isAndroid) {
       return TextField(
@@ -896,6 +921,27 @@ class _KeyFieldState extends State<KeyField> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: KeyboardConfig.builtin,
+      builder: (context, builtin, _) {
+        if (Platform.isAndroid && !builtin) {
+          // 用户关掉了内置键盘：交回系统输入法。
+          return TextField(
+            controller: widget.controller,
+            keyboardType: widget.keyboardType ?? TextInputType.text,
+            onSubmitted: widget.onSubmitted,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              hintText: widget.hint,
+            ),
+          );
+        }
+        return _buildBody(context);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // 桌面端有物理键盘，直接用原生输入框，不弹内置键盘。
     if (!Platform.isAndroid) {

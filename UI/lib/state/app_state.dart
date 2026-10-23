@@ -631,6 +631,10 @@ class AppState extends ChangeNotifier {
   /// 把输入法相关设置同步给内置键盘（键盘是全局单例，拿不到 state），
   /// 同时推给原生系统输入法——它跑在 IME 窗口里，读不到这里的 settings。
   void _applyKeyboardConfig() {
+    KeyboardConfig.builtin.value = _settings.imeBuiltin;
+    if (!_settings.imeBuiltin && PasswordKeyboard.isOpen) {
+      PasswordKeyboard.hide();
+    }
     KeyboardConfig.chinese = _settings.imeChinese;
     KeyboardConfig.candidates = _settings.imeCandidates;
     KeyboardConfig.fuzzy = _settings.imeFuzzy;

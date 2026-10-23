@@ -616,6 +616,18 @@ class _SettingsImePageState extends State<SettingsImePage>
                   children: [
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      title: const Text('使用内置键盘'),
+                      subtitle: const Text(
+                        '关闭后 App 内的输入框改用系统输入法（SSH 终端仍需内置键盘）',
+                      ),
+                      value: settings.imeBuiltin,
+                      onChanged: (v) => state.updateSettings(
+                        settings.copyWith(imeBuiltin: v),
+                      ),
+                    ),
+                    const Divider(height: 22),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('英文自动纠错'),
                       subtitle: const Text('打字后按空格时，差一个字母的常见拼写会被自动改正'),
                       value: settings.imeAutocorrect,
@@ -675,15 +687,18 @@ class _SettingsImePageState extends State<SettingsImePage>
               SectionCard(
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('全 App 使用内置键盘'),
-                      subtitle: const Text('输入框不再切回系统输入法；多行输入仍用系统键盘'),
-                      value: settings.imeGlobal,
-                      onChanged: (v) =>
-                          state.updateSettings(settings.copyWith(imeGlobal: v)),
-                    ),
-                    const Divider(height: 22),
+                    if (settings.imeBuiltin) ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('全 App 使用内置键盘'),
+                        subtitle: const Text('输入框不再切回系统输入法；多行输入仍用系统键盘'),
+                        value: settings.imeGlobal,
+                        onChanged: (v) => state.updateSettings(
+                          settings.copyWith(imeGlobal: v),
+                        ),
+                      ),
+                      const Divider(height: 22),
+                    ],
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('模糊音'),

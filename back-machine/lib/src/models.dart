@@ -80,6 +80,7 @@ class AppSettings {
     this.imeAccentMode = 'app',
     this.imeAccentColor = 0xFF4C8F6F,
     this.imeDarkMode = 'app',
+    this.imeBuiltin = true,
     this.imeAutocorrect = true,
     this.imeCustomPalette = false,
     this.imeBgColor = 0xFF1B1C1E,
@@ -155,6 +156,9 @@ class AppSettings {
   /// 键盘明暗：app = 跟随 App，system = 跟随系统。
   final String imeDarkMode;
 
+  /// 是否启用 App 内置键盘；关掉后改用系统输入法。
+  final bool imeBuiltin;
+
   /// 英文自动纠错。
   final bool imeAutocorrect;
 
@@ -208,6 +212,7 @@ class AppSettings {
     String? imeAccentMode,
     int? imeAccentColor,
     String? imeDarkMode,
+    bool? imeBuiltin,
     bool? imeAutocorrect,
     bool? imeCustomPalette,
     int? imeBgColor,
@@ -252,6 +257,7 @@ class AppSettings {
       imeAccentMode: imeAccentMode ?? this.imeAccentMode,
       imeAccentColor: imeAccentColor ?? this.imeAccentColor,
       imeDarkMode: imeDarkMode ?? this.imeDarkMode,
+      imeBuiltin: imeBuiltin ?? this.imeBuiltin,
       imeAutocorrect: imeAutocorrect ?? this.imeAutocorrect,
       imeCustomPalette: imeCustomPalette ?? this.imeCustomPalette,
       imeBgColor: imeBgColor ?? this.imeBgColor,
@@ -298,6 +304,7 @@ class AppSettings {
     'ime_accent_mode': imeAccentMode,
     'ime_accent_color': imeAccentColor,
     'ime_dark_mode': imeDarkMode,
+    'ime_builtin': imeBuiltin,
     'ime_autocorrect': imeAutocorrect,
     'ime_custom_palette': imeCustomPalette,
     'ime_bg_color': imeBgColor,
