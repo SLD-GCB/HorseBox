@@ -547,6 +547,11 @@ class ImeBoard(context: Context) : LinearLayout(context) {
 
     private fun rebuildKeys() {
         keysArea.removeAllViews()
+        // 符号页不需要候选条，把这一条的高度让给按键，让键和字母键一样大。
+        if (!clipboardMode && !expandedMode) {
+            candidateBar.visibility =
+                if (page == PAGE_SYMBOLS) GONE else VISIBLE
+        }
         if (clipboardMode) {
             renderClipboard()
             return
@@ -636,25 +641,10 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         )
     }
 
-    /** 符号页：九类横向翻页，左右滑或点两边的箭头切换。 */
+    /** 符号页：九类横向翻页，左右滑或点底部箭头切换。 */
     private fun renderSymbolPager() {
         keysArea.removeAllViews()
         symbolPageWidth = resources.displayMetrics.widthPixels
-
-        val header = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), 0, dp(4), 0)
-        }
-        header.addView(barButton("‹", false) { goSymbolPage(symbolPage - 1) })
-        symbolTitle = TextView(context).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(palette.hint)
-            setPadding(dp(8), 0, dp(8), 0)
-        }
-        header.addView(symbolTitle)
-        header.addView(barButton("›", false) { goSymbolPage(symbolPage + 1) })
-        keysArea.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(30)))
 
         val pages = LinearLayout(context).apply { orientation = HORIZONTAL }
         for (pair in SYMBOL_CATEGORIES) {
@@ -662,7 +652,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             var index = 0
             while (index < pair.second.size) {
                 val line = LinearLayout(context).apply { orientation = HORIZONTAL }
-                for (slot in 0 until 10) {
+                for (slot in 0 until 11) {
                     val position = index + slot
                     if (position >= pair.second.size) {
                         line.addView(
@@ -672,10 +662,17 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                         continue
                     }
                     val symbol = pair.second[position]
-                    line.addView(textKey(symbol, size = 20f) { typeSymbol(symbol) })
+                    line.addView(textKey(symbol, size = 18f) { typeSymbol(symbol) })
                 }
                 page.addView(line, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
-                index += 10
+                index += 11
+            }
+            // 不足四行的分类补空行，保证每页键高一致。
+            while (page.childCount < 4) {
+                page.addView(
+                    LinearLayout(context),
+                    LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f),
+                )
             }
             pages.addView(page, LayoutParams(symbolPageWidth, LayoutParams.MATCH_PARENT))
         }
@@ -691,7 +688,6 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 ),
             )
         }
-        // 滑动过程中标题跟着变，松手后再吸附对齐。
         pager.setOnScrollChangeListener { _, scrollX, _, _, _ ->
             if (symbolPageWidth <= 0) return@setOnScrollChangeListener
             val current = ((scrollX + symbolPageWidth / 2) / symbolPageWidth)
@@ -701,7 +697,6 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 updateSymbolTitle()
             }
         }
-        // 手一松就吸附到最近的一页。
         pager.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pager.postDelayed(
@@ -713,19 +708,32 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         }
         keysArea.addView(pager, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val control = hRow(
-            listOf(
-                textKey("ABC", flex = 2f, size = 14f) {
-                    page = PAGE_LETTERS
-                    rebuildCandidateBar()
-                    rebuildKeys()
-                },
-                textKey("空格", flex = 3f, size = 14f) { space() },
-                textKey("⌫", flex = 2f, size = 18f) { backspace() },
-                textKey("↵", flex = 2f, accent = true, size = 18f) { enter() },
-            ),
+        // 底部控制行：ABC、空格、‹ 类名 ›、⌫、↵
+        val control = LinearLayout(context).apply { orientation = HORIZONTAL }
+        control.addView(
+            textKey("ABC", flex = 2f, size = 13f) {
+                page = PAGE_LETTERS
+                rebuildCandidateBar()
+                rebuildKeys()
+            },
         )
-        keysArea.addView(control, LayoutParams(LayoutParams.MATCH_PARENT, dp(44)))
+        control.addView(textKey("空格", flex = 2f, size = 13f) { space() })
+        control.addView(textKey("‹", flex = 1f, size = 16f) { goSymbolPage(symbolPage - 1) })
+        symbolTitle = TextView(context).apply {
+            text = ""
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setTextColor(palette.hint)
+            isSingleLine = true
+        }
+        control.addView(
+            symbolTitle,
+            LayoutParams(0, LayoutParams.MATCH_PARENT, 3f),
+        )
+        control.addView(textKey("›", flex = 1f, size = 16f) { goSymbolPage(symbolPage + 1) })
+        control.addView(textKey("⌫", flex = 2f, size = 17f) { backspace() })
+        control.addView(textKey("↵", flex = 2f, accent = true, size = 17f) { enter() })
+        keysArea.addView(control, LayoutParams(LayoutParams.MATCH_PARENT, dp(46)))
 
         symbolPager = pager
         pager.post {
@@ -753,7 +761,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
 
     private fun updateSymbolTitle() {
         val pair = SYMBOL_CATEGORIES[symbolPage]
-        symbolTitle?.text = pair.first + "  " +
+        symbolTitle?.text = pair.first + " " +
             (symbolPage + 1).toString() + "/" +
             SYMBOL_CATEGORIES.size.toString()
     }
