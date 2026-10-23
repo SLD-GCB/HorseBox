@@ -85,10 +85,16 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         keysArea.orientation = VERTICAL
     }
 
-    fun build() {
-        removeAllViews()
+    /** 把两种"底色"刷成当前配色：根容器（按键之间的地板）和两条工具栏。 */
+    private fun applyColors() {
+        setBackgroundColor(palette.bg)
         topBar.background = solid(palette.bar)
         candidateBar.background = solid(palette.bar)
+    }
+
+    fun build() {
+        removeAllViews()
+        applyColors()
         addView(topBar, LayoutParams(LayoutParams.MATCH_PARENT, dp(38)))
         addView(divider(), LayoutParams(LayoutParams.MATCH_PARENT, dp(1)))
         addView(candidateBar, LayoutParams(LayoutParams.MATCH_PARENT, dp(38)))
@@ -119,6 +125,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         chinese = !asciiOnly && ImePrefs.chinese
         nine = ImePrefs.layout == "nine"
         scale = ImePrefs.scale
+        applyColors()
         rebuildTopBar()
         rebuildCandidateBar()
         rebuildKeys()
