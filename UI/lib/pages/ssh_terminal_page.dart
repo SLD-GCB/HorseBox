@@ -67,6 +67,8 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   @override
   void dispose() {
     PasswordKeyboard.hide();
+    _sysController.dispose();
+    _sysFocus.dispose();
     _scroll.dispose();
     _focus.removeListener(_onFocusChanged);
     _stdout?.cancel();
@@ -203,6 +205,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
               ),
             ),
             if (Platform.isAndroid) _keyBar(),
+            if (Platform.isAndroid && _systemInput) _systemBar(),
           ],
         ),
       ),
@@ -317,7 +320,115 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
   }
 
   void _openKeypad() {
-    PasswordKeyboard.show(_TerminalSink(this), height: 240, terminal: true);
+    if (_systemInput || !KeyboardConfig.builtin.value) {
+      _useSystemInput();
+      return;
+    }
+    PasswordKeyboard.show(
+      _TerminalSink(this),
+      height: 240,
+      terminal: true,
+      onSystem: _useSystemInput,
+    );
+  }
+
+  // ------------------------------------------------------ 系统输入法输入条
+
+  bool _systemInput = false;
+  final _sysController = TextEditingController();
+  final _sysFocus = FocusNode();
+  String _sysText = '';
+  bool _sysResetting = false;
+
+  static final _del = String.fromCharCode(127);
+  static final _enter = String.fromCharCode(13);
+
+  void _useSystemInput() {
+    PasswordKeyboard.hide();
+    setState(() => _systemInput = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sysFocus.requestFocus();
+    });
+  }
+
+  void _useBuiltInInput() {
+    setState(() => _systemInput = false);
+    _sysFocus.unfocus();
+    _sysResetting = true;
+    _sysController.clear();
+    _sysText = '';
+    _sysResetting = false;
+    _openKeypad();
+  }
+
+  /// 把输入框里的增量翻译成终端的按键：删几个发几个 DEL，新增的直接发。
+  void _onSystemChanged(String next) {
+    if (_sysResetting) return;
+    final prev = _sysText;
+    if (next == prev) return;
+    var same = 0;
+    while (same < prev.length &&
+        same < next.length &&
+        prev[same] == next[same]) {
+      same++;
+    }
+    final removed = prev.length - same;
+    for (var i = 0; i < removed; i++) {
+      _send(_del);
+    }
+    final added = next.substring(same);
+    if (added.isNotEmpty) _send(added);
+    _sysText = next;
+    if (_sysText.length > 160) {
+      _sysResetting = true;
+      _sysController.clear();
+      _sysText = '';
+      _sysResetting = false;
+    }
+  }
+
+  Widget _systemBar() {
+    return Container(
+      color: const Color(0xFF262626),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _sysController,
+              focusNode: _sysFocus,
+              autofocus: true,
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.done,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontFamily: 'monospace',
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: '系统键盘输入，回车发送',
+                hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              onChanged: _onSystemChanged,
+              onSubmitted: (_) {
+                _send(_enter);
+                _sysResetting = true;
+                _sysController.clear();
+                _sysText = '';
+                _sysResetting = false;
+                _sysFocus.requestFocus();
+              },
+            ),
+          ),
+          TextButton(
+            onPressed: _useBuiltInInput,
+            child: const Text('内置', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openMenu(Offset global) async {
