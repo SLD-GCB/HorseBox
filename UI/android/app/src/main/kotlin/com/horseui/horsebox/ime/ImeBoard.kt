@@ -148,9 +148,54 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         build()
     }
 
-    /** 系统深浅色变了：重新取一次配色并整体重建，背景立刻跟上。 */
+    /** 系统深浅色 / 配色设置变了：只换颜色，不重建按键。 */
     fun applyTheme() {
-        build()
+        repaint()
+    }
+
+    /**
+     * 就地换色：根容器、两条工具栏、每个键的底座和键帽、以及键上的文字。
+     * 不新建任何 View，键盘正显示时也不会闪一下。
+     */
+    private fun repaint() {
+        applyColors()
+        repaintKeys(keysArea)
+        rebuildTopBar()
+        rebuildCandidateBar()
+    }
+
+    private fun repaintKeys(parent: ViewGroup) {
+        for (index in 0 until parent.childCount) {
+            val child = parent.getChildAt(index)
+            if (child is FrameLayout && child.tag is Boolean) {
+                val accent = child.tag as Boolean
+                child.background = baseShape(accent)
+                val content = child.getChildAt(0)
+                if (content != null) {
+                    content.background = keyBackground(accent)
+                    paintLabels(content, accent)
+                }
+            } else if (child is ViewGroup) {
+                repaintKeys(child)
+            }
+        }
+    }
+
+    private fun paintLabels(view: View, accent: Boolean) {
+        if (view is TextView) {
+            view.setTextColor(
+                when (view.tag) {
+                    TAG_HINT -> palette.hint
+                    else -> if (accent) palette.onAccent else palette.label
+                },
+            )
+            return
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                paintLabels(view.getChildAt(index), accent)
+            }
+        }
     }
 
     /** 词库后台加载完成后由 Service 调回来。 */
@@ -708,6 +753,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
             setTextColor(if (accent) palette.onAccent else palette.label)
             isSingleLine = true
+            tag = TAG_LABEL
         }
         return cell(
             view,
@@ -738,6 +784,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 gravity = Gravity.CENTER
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f * scale)
                 setTextColor(palette.hint)
+                tag = TAG_HINT
             },
         )
         return cell(box, 1f, false, onTap = { typeText(main) })
@@ -759,26 +806,12 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         onLongPress: (() -> Unit)? = null,
     ): View {
         val wrap = FrameLayout(context)
-        val radius = dp((9 * scale).roundToInt()).toFloat()
         val lift = dp((2 * scale).roundToInt())
 
-        wrap.background = GradientDrawable().apply {
-            cornerRadius = radius
-            setColor(baseColor(accent))
-        }
-        val cap = GradientDrawable().apply {
-            cornerRadius = radius
-            setColor(capColor(accent))
-            setStroke(dp(1), borderColor(accent))
-        }
-        content.background = RippleDrawable(
-            ColorStateList.valueOf(palette.ripple),
-            cap,
-            GradientDrawable().apply {
-                cornerRadius = radius
-                setColor(Color.WHITE)
-            },
-        )
+        // tag 记住这个键是不是强调键，换色时就地刷新，不用重建。
+        wrap.tag = accent
+        wrap.background = baseShape(accent)
+        content.background = keyBackground(accent)
         content.isClickable = true
         content.setOnTouchListener(object : View.OnTouchListener {
             private var pressed = false
@@ -1347,26 +1380,30 @@ class ImeBoard(context: Context) : LinearLayout(context) {
      * 键帽 + 底座：底层是深一档的圆角矩形，上层键帽整体上移 2dp 并带 1dp 描边。
      * 远看是一块块键帽浮在板子上，按下去有"落到实底"的感觉。
      */
-    private fun keyBackground(accent: Boolean): Drawable {
-        val radius = dp((9 * scale).roundToInt()).toFloat()
-        val lift = dp((2 * scale).roundToInt())
-        val capColor = if (accent) accentColor() else palette.key
-        val baseColor = if (accent) shade(accentColor(), 0.74f) else palette.keyBase
-        val borderColor = if (accent) shade(accentColor(), 1.22f) else palette.keyBorder
-
-        val base = GradientDrawable().apply {
-            cornerRadius = radius
-            setColor(baseColor)
+    /** 底座（键帽下面那层）。 */
+    private fun baseShape(accent: Boolean): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = keyRadius()
+            setColor(baseColor(accent))
         }
+
+    private fun keyRadius(): Float = dp((9 * scale).roundToInt()).toFloat()
+
+    private fun keyBackground(accent: Boolean): Drawable {
+        val radius = keyRadius()
         val cap = GradientDrawable().apply {
             cornerRadius = radius
-            setColor(capColor)
-            setStroke(dp(1), borderColor)
+            setColor(capColor(accent))
+            setStroke(dp(1), borderColor(accent))
         }
-        val layers = LayerDrawable(
-            arrayOf(base, InsetDrawable(cap, 0, 0, 0, lift)),
+        return RippleDrawable(
+            ColorStateList.valueOf(palette.ripple),
+            cap,
+            GradientDrawable().apply {
+                cornerRadius = radius
+                setColor(Color.WHITE)
+            },
         )
-        return RippleDrawable(ColorStateList.valueOf(palette.ripple), layers, null)
     }
 
     private fun capColor(accent: Boolean): Int =
@@ -1408,6 +1445,9 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         private const val PAGE_LETTERS = 0
         private const val PAGE_DIGITS = 1
         private const val PAGE_SYMBOLS = 2
+
+        private const val TAG_LABEL = "label"
+        private const val TAG_HINT = "hint"
 
         private val ROW_Q = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
         private val ROW_A = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
