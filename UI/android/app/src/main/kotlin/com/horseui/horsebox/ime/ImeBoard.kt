@@ -58,7 +58,10 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     private var expandedMode = false
     private var allCandidates: List<Candidate> = emptyList()
     /** 符号分类下标，-1 表示显示分类入口。 */
-    private var symbolCategory = -1
+    private var symbolPage = 0
+    private var symbolPager: HorizontalScrollView? = null
+    private var symbolTitle: TextView? = null
+    private var symbolPageWidth = 0
     private var page = PAGE_LETTERS
     private var buffer = StringBuilder()
     private var candidates: List<Candidate> = emptyList()
@@ -118,7 +121,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         candidates = emptyList()
         shift = false
         page = PAGE_LETTERS
-        symbolCategory = -1
+        symbolPage = 0
         enBuffer = StringBuilder()
         enSuggest = emptyList()
         clipboardMode = false
@@ -552,13 +555,12 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             renderCandidates()
             return
         }
-        if (page == PAGE_SYMBOLS && symbolCategory >= 0) {
-            renderSymbolGrid()
+        if (page == PAGE_SYMBOLS) {
+            renderSymbolPager()
             return
         }
         val rows: List<LinearLayout> = when {
             page == PAGE_DIGITS -> digitRows()
-            page == PAGE_SYMBOLS -> symbolCategories()
             nine && chinese -> nineRows()
             else -> letterRows()
         }
@@ -634,16 +636,87 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         )
     }
 
-    /** 符号页第一层：分类入口。 */
-    private fun symbolCategories(): List<LinearLayout> = listOf(
-        hRow(listOf(categoryKey(0), categoryKey(1), categoryKey(2))),
-        hRow(listOf(categoryKey(3), categoryKey(4), categoryKey(5))),
-        hRow(listOf(categoryKey(6), categoryKey(7), categoryKey(8))),
-        hRow(
+    /** 符号页：九类横向翻页，左右滑或点两边的箭头切换。 */
+    private fun renderSymbolPager() {
+        keysArea.removeAllViews()
+        symbolPageWidth = resources.displayMetrics.widthPixels
+
+        val header = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        header.addView(barButton("‹", false) { goSymbolPage(symbolPage - 1) })
+        symbolTitle = TextView(context).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(palette.hint)
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        header.addView(symbolTitle)
+        header.addView(barButton("›", false) { goSymbolPage(symbolPage + 1) })
+        keysArea.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(30)))
+
+        val pages = LinearLayout(context).apply { orientation = HORIZONTAL }
+        for (pair in SYMBOL_CATEGORIES) {
+            val page = LinearLayout(context).apply { orientation = VERTICAL }
+            var index = 0
+            while (index < pair.second.size) {
+                val line = LinearLayout(context).apply { orientation = HORIZONTAL }
+                for (slot in 0 until 10) {
+                    val position = index + slot
+                    if (position >= pair.second.size) {
+                        line.addView(
+                            View(context),
+                            LayoutParams(0, LayoutParams.MATCH_PARENT, 1f),
+                        )
+                        continue
+                    }
+                    val symbol = pair.second[position]
+                    line.addView(textKey(symbol, size = 20f) { typeSymbol(symbol) })
+                }
+                page.addView(line, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+                index += 10
+            }
+            pages.addView(page, LayoutParams(symbolPageWidth, LayoutParams.MATCH_PARENT))
+        }
+
+        val pager = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(
+                pages,
+                LayoutParams(
+                    LayoutParams.WRAP_CONTENT,
+                    LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+        // 滑动过程中标题跟着变，松手后再吸附对齐。
+        pager.setOnScrollChangeListener { _, scrollX, _, _, _ ->
+            if (symbolPageWidth <= 0) return@setOnScrollChangeListener
+            val current = ((scrollX + symbolPageWidth / 2) / symbolPageWidth)
+                .coerceIn(0, SYMBOL_CATEGORIES.size - 1)
+            if (current != symbolPage) {
+                symbolPage = current
+                updateSymbolTitle()
+            }
+        }
+        // 手一松就吸附到最近的一页。
+        pager.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pager.postDelayed(
+                    { snapSymbolPager() },
+                    120,
+                )
+            }
+            false
+        }
+        keysArea.addView(pager, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val control = hRow(
             listOf(
                 textKey("ABC", flex = 2f, size = 14f) {
                     page = PAGE_LETTERS
-                    symbolCategory = -1
                     rebuildCandidateBar()
                     rebuildKeys()
                 },
@@ -651,61 +724,38 @@ class ImeBoard(context: Context) : LinearLayout(context) {
                 textKey("⌫", flex = 2f, size = 18f) { backspace() },
                 textKey("↵", flex = 2f, accent = true, size = 18f) { enter() },
             ),
-        ),
-    )
-
-    private fun categoryKey(index: Int): View =
-        textKey(SYMBOL_CATEGORIES[index].first, size = 15f) {
-            symbolCategory = index
-            rebuildKeys()
-        }
-
-    /** 符号页第二层：某一类的全部符号，8 个一行，超出可滚动。 */
-    private fun renderSymbolGrid() {
-        val pair = SYMBOL_CATEGORIES[symbolCategory]
-        val header = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), 0, dp(4), 0)
-        }
-        header.addView(barButton("‹ 返回", false) {
-            symbolCategory = -1
-            rebuildKeys()
-        })
-        header.addView(
-            TextView(context).apply {
-                text = pair.first + " · " + pair.second.size.toString() + " 个"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setTextColor(palette.hint)
-                setPadding(dp(6), 0, 0, 0)
-            },
         )
-        keysArea.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(38)))
+        keysArea.addView(control, LayoutParams(LayoutParams.MATCH_PARENT, dp(44)))
 
-        val column = LinearLayout(context).apply {
-            orientation = VERTICAL
-            setPadding(dp(4), 0, dp(4), dp(4))
+        symbolPager = pager
+        pager.post {
+            pager.scrollTo(symbolPage * symbolPageWidth, 0)
+            updateSymbolTitle()
         }
-        val items = pair.second
-        var index = 0
-        while (index < items.size) {
-            val row = LinearLayout(context).apply { orientation = HORIZONTAL }
-            for (slot in 0 until 8) {
-                val position = index + slot
-                if (position >= items.size) {
-                    row.addView(View(context), LayoutParams(0, LayoutParams.MATCH_PARENT, 1f))
-                    continue
-                }
-                val symbol = items[position]
-                row.addView(
-                    textKey(symbol, size = 20f) { typeSymbol(symbol) },
-                )
-            }
-            column.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
-            index += 8
-        }
-        val scroll = ScrollView(context).apply { addView(column) }
-        keysArea.addView(scroll, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+    }
+
+    private fun goSymbolPage(index: Int) {
+        val target = index.coerceIn(0, SYMBOL_CATEGORIES.size - 1)
+        symbolPage = target
+        symbolPager?.smoothScrollTo(target * symbolPageWidth, 0)
+        updateSymbolTitle()
+    }
+
+    private fun snapSymbolPager() {
+        val pager = symbolPager ?: return
+        if (symbolPageWidth <= 0) return
+        val page = ((pager.scrollX + symbolPageWidth / 2) / symbolPageWidth)
+            .coerceIn(0, SYMBOL_CATEGORIES.size - 1)
+        symbolPage = page
+        pager.smoothScrollTo(page * symbolPageWidth, 0)
+        updateSymbolTitle()
+    }
+
+    private fun updateSymbolTitle() {
+        val pair = SYMBOL_CATEGORIES[symbolPage]
+        symbolTitle?.text = pair.first + "  " +
+            (symbolPage + 1).toString() + "/" +
+            SYMBOL_CATEGORIES.size.toString()
     }
 
     private fun nineRows(): List<LinearLayout> = listOf(
@@ -1406,7 +1456,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     private fun toggleSymbols() {
         commitPending()
         page = if (page == PAGE_SYMBOLS) PAGE_LETTERS else PAGE_SYMBOLS
-        symbolCategory = -1
+        symbolPage = 0
         rebuildTopBar()
         rebuildCandidateBar()
         rebuildKeys()
