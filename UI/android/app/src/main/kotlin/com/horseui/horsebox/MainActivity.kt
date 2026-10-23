@@ -34,6 +34,8 @@ class MainActivity : FlutterActivity() {
                 "configure" -> {
                     val values = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
                     ImePrefs.update(this, values)
+                    // 输入法正在显示的话，立刻按新配置重建一次。
+                    HorseImeService.instance?.onSettingsChanged()
                     result.success(null)
                 }
                 "openSettings" -> {

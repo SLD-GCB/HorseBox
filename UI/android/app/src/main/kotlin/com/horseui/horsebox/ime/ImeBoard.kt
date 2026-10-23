@@ -67,7 +67,9 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     private var enSuggest: List<String> = emptyList()
     private var pinyinView: TextView? = null
     private var scale = ImePrefs.scale
-    private var palette = ImeTheme.palette(context)
+    // 每次用到都现读一次：设置一改就不会留下旧配色的快照。
+    private val palette: ImePalette
+        get() = ImeTheme.palette(context)
 
     private val topBar = LinearLayout(context)
     private val candidateBar = LinearLayout(context)
@@ -85,7 +87,6 @@ class ImeBoard(context: Context) : LinearLayout(context) {
 
     fun build() {
         removeAllViews()
-        palette = ImeTheme.palette(context)
         topBar.background = solid(palette.bar)
         candidateBar.background = solid(palette.bar)
         addView(topBar, LayoutParams(LayoutParams.MATCH_PARENT, dp(38)))
@@ -103,7 +104,6 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     /** 每次开始输入时调用：密码框强制英文，其余跟随设置。 */
     fun resetForInput(asciiOnly: Boolean) {
         ImePrefs.load(context)
-        palette = ImeTheme.palette(context)
         this.asciiOnly = asciiOnly
         buffer = StringBuilder()
         cursor = 0
@@ -143,7 +143,6 @@ class ImeBoard(context: Context) : LinearLayout(context) {
 
     /** 系统深浅色变了：重新取一次配色并整体重建，背景立刻跟上。 */
     fun applyTheme() {
-        palette = ImeTheme.palette(context)
         build()
     }
 

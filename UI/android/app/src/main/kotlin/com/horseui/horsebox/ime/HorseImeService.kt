@@ -22,10 +22,17 @@ import android.view.inputmethod.InputMethodManager
  */
 class HorseImeService : InputMethodService(), ImeBoard.Host {
 
+    companion object {
+        @Volatile
+        var instance: HorseImeService? = null
+            private set
+    }
+
     private var board: ImeBoard? = null
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         ImePrefs.load(this)
         ImeFeedback.init(this)
         ImeClipboard.load(this)
@@ -70,7 +77,19 @@ class HorseImeService : InputMethodService(), ImeBoard.Host {
 
     override fun onDestroy() {
         ImeLearning.flush()
+        if (instance === this) instance = null
         super.onDestroy()
+    }
+
+    /**
+     * App 设置页刚推了新配置：立刻刷新一次配色。
+     *
+     * 输入法和 App 在同一个进程里，所以直接静态引用调用，
+     * 不用广播；键盘正在显示时也能当场变。
+     */
+    fun onSettingsChanged() {
+        ImePrefs.load(this)
+        board?.applyTheme()
     }
 
     /** 系统切换深色/浅色时，键盘立刻换配色，不用等下一次弹出。 */
