@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../ime/pinyin_engine.dart';
+import '../platform/ime_channel.dart';
 import 'masked_field.dart';
 
 /// 内置键盘的默认高度。宿主据此让页面让位。
@@ -472,7 +473,12 @@ class _PasswordKeypadState extends State<_PasswordKeypad> {
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: onTap,
+            onTap: onTap == null
+                ? null
+                : () {
+                    SystemIme.tap();
+                    onTap();
+                  },
             child: Center(
               child:
                   child ??

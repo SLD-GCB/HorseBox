@@ -33,4 +33,6 @@ flutter:
     - assets/rules/geoip-cn.srs
     - assets/ime/pinyin.tsv.gz
     - assets/ime/syllables.txt
+    - assets/ime/st_chars.tsv
+    - assets/ime/en_words.tsv.gz
     - assets/ime/NOTICE.txt

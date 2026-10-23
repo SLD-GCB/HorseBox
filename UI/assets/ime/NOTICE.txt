@@ -13,4 +13,20 @@
    MIT License
    —— 仅用于补充词频，决定候选排序；未复制其分词代码。
 
-最终词库约 10 万条，gzip 后约 1.2MB，随 App 离线分发。
+4. CC-CEDICT（https://www.mdbg.net/chinese/dictionary）
+   CC BY-SA 4.0
+   —— 补充现代词条、生僻字与繁体单字。
+
+5. OpenCC STCharacters（https://github.com/BYVoid/OpenCC）
+   Apache License 2.0
+   —— 仅取「简 -> 繁」单字对照，用于输入法的简繁切换（st_chars.tsv）。
+
+6. google-10000-english（https://github.com/first20hours/google-10000-english）
+   Apache License 2.0（以其仓库声明为准）
+   —— 英文词频表，决定补全顺序。
+
+7. dwyl/english-words（https://github.com/dwyl/english-words）
+   The Unlicense
+   —— 补充完整英文词形（en_words.tsv.gz，约 37 万词）。
+
+最终词库约 15.9 万条，gzip 后约 2.0MB，随 App 离线分发。

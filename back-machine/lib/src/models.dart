@@ -73,6 +73,21 @@ class AppSettings {
     this.imeSentence = true,
     this.imeLayout = 'full',
     this.imeGlobal = false,
+    this.imeHeight = 282,
+    this.imeScale = 1.0,
+    this.imeLearn = true,
+    this.imeClipboard = true,
+    this.imeAccentMode = 'app',
+    this.imeAccentColor = 0xFF4C8F6F,
+    this.imeDarkMode = 'app',
+    this.imeAutocorrect = true,
+    this.imeCustomPalette = false,
+    this.imeBgColor = 0xFF1B1C1E,
+    this.imeKeyColor = 0xFF35373C,
+    this.imeTextColor = 0xFFEDEDEF,
+    this.imeSound = false,
+    this.imeVibrate = true,
+    this.imeVibrateAmplitude = 140,
     this.autoConnect = false,
     this.logLimit = 800,
     this.panelUrl = '',
@@ -124,6 +139,37 @@ class AppSettings {
 
   /// 全 App 使用内置键盘（不再切回系统输入法）。
   final bool imeGlobal;
+
+  /// 系统输入法的键盘高度（dp）和按键缩放，1.0 为默认大小。
+  final int imeHeight;
+  final double imeScale;
+
+  /// 词频记忆（选过的词下次优先）与剪贴板入口。
+  final bool imeLearn;
+  final bool imeClipboard;
+
+  /// 键盘配色：app = 跟随 App 主题色，system = 跟随系统，custom = 自定义。
+  final String imeAccentMode;
+  final int imeAccentColor;
+
+  /// 键盘明暗：app = 跟随 App，system = 跟随系统。
+  final String imeDarkMode;
+
+  /// 英文自动纠错。
+  final bool imeAutocorrect;
+
+  /// 自定义整套键盘配色（背景 / 按键 / 文字）。
+  final bool imeCustomPalette;
+  final int imeBgColor;
+  final int imeKeyColor;
+  final int imeTextColor;
+
+  /// 按键音、按键震动（输入法自己播/自己震，不跟系统的触摸提示开关）。
+  final bool imeSound;
+  final bool imeVibrate;
+
+  /// 震动振幅 20–255。
+  final int imeVibrateAmplitude;
   final bool autoConnect;
   final int logLimit;
 
@@ -155,6 +201,21 @@ class AppSettings {
     bool? imeSentence,
     String? imeLayout,
     bool? imeGlobal,
+    int? imeHeight,
+    double? imeScale,
+    bool? imeLearn,
+    bool? imeClipboard,
+    String? imeAccentMode,
+    int? imeAccentColor,
+    String? imeDarkMode,
+    bool? imeAutocorrect,
+    bool? imeCustomPalette,
+    int? imeBgColor,
+    int? imeKeyColor,
+    int? imeTextColor,
+    bool? imeSound,
+    bool? imeVibrate,
+    int? imeVibrateAmplitude,
     bool? autoConnect,
     int? logLimit,
     String? panelUrl,
@@ -184,6 +245,21 @@ class AppSettings {
       imeSentence: imeSentence ?? this.imeSentence,
       imeLayout: imeLayout ?? this.imeLayout,
       imeGlobal: imeGlobal ?? this.imeGlobal,
+      imeHeight: imeHeight ?? this.imeHeight,
+      imeScale: imeScale ?? this.imeScale,
+      imeLearn: imeLearn ?? this.imeLearn,
+      imeClipboard: imeClipboard ?? this.imeClipboard,
+      imeAccentMode: imeAccentMode ?? this.imeAccentMode,
+      imeAccentColor: imeAccentColor ?? this.imeAccentColor,
+      imeDarkMode: imeDarkMode ?? this.imeDarkMode,
+      imeAutocorrect: imeAutocorrect ?? this.imeAutocorrect,
+      imeCustomPalette: imeCustomPalette ?? this.imeCustomPalette,
+      imeBgColor: imeBgColor ?? this.imeBgColor,
+      imeKeyColor: imeKeyColor ?? this.imeKeyColor,
+      imeTextColor: imeTextColor ?? this.imeTextColor,
+      imeSound: imeSound ?? this.imeSound,
+      imeVibrate: imeVibrate ?? this.imeVibrate,
+      imeVibrateAmplitude: imeVibrateAmplitude ?? this.imeVibrateAmplitude,
       autoConnect: autoConnect ?? this.autoConnect,
       logLimit: logLimit ?? this.logLimit,
       panelUrl: panelUrl ?? this.panelUrl,
@@ -215,6 +291,21 @@ class AppSettings {
     'ime_sentence': imeSentence,
     'ime_layout': imeLayout,
     'ime_global': imeGlobal,
+    'ime_height': imeHeight,
+    'ime_scale': imeScale,
+    'ime_learn': imeLearn,
+    'ime_clipboard': imeClipboard,
+    'ime_accent_mode': imeAccentMode,
+    'ime_accent_color': imeAccentColor,
+    'ime_dark_mode': imeDarkMode,
+    'ime_autocorrect': imeAutocorrect,
+    'ime_custom_palette': imeCustomPalette,
+    'ime_bg_color': imeBgColor,
+    'ime_key_color': imeKeyColor,
+    'ime_text_color': imeTextColor,
+    'ime_sound': imeSound,
+    'ime_vibrate': imeVibrate,
+    'ime_vibrate_amplitude': imeVibrateAmplitude,
     'auto_connect': autoConnect,
     'log_limit': logLimit,
     'panel_url': panelUrl,
@@ -276,6 +367,12 @@ class AppSettings {
       imeSentence: json['ime_sentence'] as bool? ?? true,
       imeLayout: json['ime_layout'] as String? ?? 'full',
       imeGlobal: json['ime_global'] as bool? ?? false,
+      imeHeight: (json['ime_height'] as num?)?.toInt() ?? 282,
+      imeScale: (json['ime_scale'] as num?)?.toDouble() ?? 1.0,
+      imeLearn: json['ime_learn'] as bool? ?? true,
+      imeClipboard: json['ime_clipboard'] as bool? ?? true,
+      imeAccentMode: json['ime_accent_mode'] as String? ?? 'app',
+      imeAccentColor: (json['ime_accent_color'] as num?)?.toInt() ?? 0xFF4C8F6F,
       autoConnect: json['auto_connect'] as bool? ?? false,
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
       panelUrl: json['panel_url'] as String? ?? '',

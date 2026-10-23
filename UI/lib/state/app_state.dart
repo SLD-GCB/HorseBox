@@ -9,6 +9,7 @@ import '../security/secret_vault.dart';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/ime_channel.dart';
 import '../platform/vpn_channel.dart';
 import '../utils/app_paths.dart';
 import '../utils/rule_assets.dart';
@@ -627,7 +628,8 @@ class AppState extends ChangeNotifier {
     _notify();
   }
 
-  /// 把输入法相关设置同步给内置键盘（键盘是全局单例，拿不到 state）。
+  /// 把输入法相关设置同步给内置键盘（键盘是全局单例，拿不到 state），
+  /// 同时推给原生系统输入法——它跑在 IME 窗口里，读不到这里的 settings。
   void _applyKeyboardConfig() {
     KeyboardConfig.chinese = _settings.imeChinese;
     KeyboardConfig.candidates = _settings.imeCandidates;
@@ -635,6 +637,34 @@ class AppState extends ChangeNotifier {
     KeyboardConfig.sentence = _settings.imeSentence;
     KeyboardConfig.layout = _settings.imeLayout;
     KeyboardConfig.global = _settings.imeGlobal;
+    if (Platform.isAndroid) {
+      unawaited(
+        SystemIme.configure(
+          chinese: _settings.imeChinese,
+          layout: _settings.imeLayout,
+          fuzzy: _settings.imeFuzzy,
+          sentence: _settings.imeSentence,
+          candidates: _settings.imeCandidates,
+          height: _settings.imeHeight,
+          scale: _settings.imeScale,
+          learn: _settings.imeLearn,
+          clipboard: _settings.imeClipboard,
+          accent: _settings.accent,
+          accentMode: _settings.imeAccentMode,
+          accentColor: _settings.imeAccentColor,
+          darkMode: _settings.imeDarkMode,
+          themeMode: _settings.themeMode,
+          sound: _settings.imeSound,
+          vibrate: _settings.imeVibrate,
+          vibrateAmplitude: _settings.imeVibrateAmplitude,
+          autocorrect: _settings.imeAutocorrect,
+          customPalette: _settings.imeCustomPalette,
+          bgColor: _settings.imeBgColor,
+          keyColor: _settings.imeKeyColor,
+          textColor: _settings.imeTextColor,
+        ),
+      );
+    }
   }
 
   /// Windows 专用：迁移数据目录并记住位置。

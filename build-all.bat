@@ -181,6 +181,13 @@ if not exist "%APK%" (
   goto fail
 )
 copy /y "%APK%" "%DIST%\HorseBox-%VER%-android-arm64.apk" >nul
+rem [5.1] 校验词库资源确实打进了 APK
+"%PS%" -NoProfile -Command "$apk='%DIST%\HorseBox-%VER%-android-arm64.apk'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead($apk); $names=@($z.Entries.FullName); $z.Dispose(); $need=@('assets/flutter_assets/assets/ime/pinyin.tsv.gz','assets/flutter_assets/assets/ime/en_words.tsv.gz','assets/flutter_assets/assets/ime/st_chars.tsv'); $bad=0; foreach($n in $need){ if($names -notcontains $n){ Write-Host ('[错误] APK 缺少资源: ' + $n); $bad=1 } }; if($bad -eq 1){ exit 1 } else { Write-Host '[5.1] 词库资源校验通过' }"
+if errorlevel 1 (
+  popd
+  goto fail
+)
+
 
 :skip_android
 popd
