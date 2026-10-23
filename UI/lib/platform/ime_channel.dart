@@ -23,6 +23,8 @@ class ImeStats {
     this.hasVibrator = true,
     this.globalHaptic = true,
     this.amplitudeControl = false,
+    this.customPalette = false,
+    this.keyboardDark = true,
   });
 
   final int clipboard;
@@ -32,6 +34,10 @@ class ImeStats {
   final bool hasVibrator;
   final bool globalHaptic;
   final bool amplitudeControl;
+
+  /// 输入法当前生效的配色状态（排查用）：是否自定义、是否深色。
+  final bool customPalette;
+  final bool keyboardDark;
 
   static const empty = ImeStats(clipboard: 0, learned: 0);
 }
@@ -86,6 +92,8 @@ class SystemIme {
         hasVibrator: raw?['hasVibrator'] as bool? ?? true,
         globalHaptic: raw?['globalHaptic'] as bool? ?? true,
         amplitudeControl: raw?['amplitudeControl'] as bool? ?? false,
+        customPalette: raw?['customPalette'] as bool? ?? false,
+        keyboardDark: raw?['keyboardDark'] as bool? ?? true,
       );
     } catch (_) {
       return ImeStats.empty;

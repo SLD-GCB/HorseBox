@@ -422,6 +422,11 @@ class _SettingsImePageState extends State<SettingsImePage>
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "输入法当前：${_stats.customPalette ? '自定义配色' : '内置配色'} · ${_stats.keyboardDark ? '深色' : '浅色'}",
+                        style: TextStyle(fontSize: 11, color: scheme.primary),
+                      ),
                       const Divider(height: 22),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,

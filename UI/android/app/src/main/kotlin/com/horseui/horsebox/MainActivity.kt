@@ -10,6 +10,7 @@ import com.horseui.horsebox.ime.ImeClipboard
 import com.horseui.horsebox.ime.ImeFeedback
 import com.horseui.horsebox.ime.ImeLearning
 import com.horseui.horsebox.ime.ImePrefs
+import com.horseui.horsebox.ime.ImeTheme
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -43,6 +44,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "stats" -> {
+                    ImePrefs.load(this)
                     ImeClipboard.load(this)
                     ImeLearning.load(this)
                     val diagnostics = ImeFeedback.diagnose(this)
@@ -53,6 +55,8 @@ class MainActivity : FlutterActivity() {
                             "hasVibrator" to (diagnostics["hasVibrator"] ?: false),
                             "globalHaptic" to (diagnostics["globalHaptic"] ?: true),
                             "amplitudeControl" to (diagnostics["amplitudeControl"] ?: false),
+                            "customPalette" to ImePrefs.customPalette,
+                            "keyboardDark" to ImeTheme.isDark(this),
                         ),
                     )
                 }
