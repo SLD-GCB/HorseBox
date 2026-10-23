@@ -57,6 +57,8 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
     _terminal.onResize = (width, height, pixelWidth, pixelHeight) =>
         _conn.resize(width, height);
     _focus.addListener(_onFocusChanged);
+    KeyboardConfig.builtin.addListener(_onBuiltinChanged);
+    _systemInput = !KeyboardConfig.builtin.value;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focus.requestFocus();
       _ensureInput();
@@ -66,6 +68,7 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
 
   @override
   void dispose() {
+    KeyboardConfig.builtin.removeListener(_onBuiltinChanged);
     PasswordKeyboard.hide();
     _sysController.dispose();
     _sysFocus.dispose();
@@ -342,6 +345,25 @@ class _SshTerminalPageState extends State<SshTerminalPage> {
 
   static final _del = String.fromCharCode(127);
   static final _enter = String.fromCharCode(13);
+
+  /// 设置里的「使用内置键盘」一变，终端立刻跟着切，不用退出重进。
+  void _onBuiltinChanged() {
+    if (!mounted) return;
+    final useBuiltIn = KeyboardConfig.builtin.value;
+    if (!useBuiltIn) {
+      if (!_systemInput) _useSystemInput();
+      return;
+    }
+    if (_systemInput) {
+      PasswordKeyboard.hide();
+      _sysFocus.unfocus();
+      _sysResetting = true;
+      _sysController.clear();
+      _sysText = '';
+      _sysResetting = false;
+      setState(() => _systemInput = false);
+    }
+  }
 
   void _useSystemInput() {
     PasswordKeyboard.hide();

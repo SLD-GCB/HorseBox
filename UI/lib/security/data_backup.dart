@@ -53,7 +53,7 @@ class BackupPayload {
   bool get imeNine => preferences['ime_layout'] == 'nine';
 }
 
-/// 整包备份：settings.json + secret.key + rules/，用口令重新加密后写成一个文件。
+/// 整包备份：整个数据目录（设置、secret.key、规则、词频、剪贴板等），用口令重新加密后写成一个文件。
 ///
 /// 内部敏感字段仍由设备密钥（secret.key）加密，所以包里必须带上它，
 /// 否则恢复到另一台设备后解不出订阅地址和密码。
@@ -74,25 +74,11 @@ class BackupService {
     if (!await settings.exists()) {
       throw BackupException('数据目录里没有 settings.json，无法备份');
     }
-    final files = <String, List<int>>{
-      'settings.json': await settings.readAsBytes(),
-    };
-    final keyFile = File(p.join(dataDir, 'secret.key'));
-    if (await keyFile.exists()) {
-      files['secret.key'] = await keyFile.readAsBytes();
-    }
-    final rules = Directory(p.join(dataDir, 'rules'));
-    if (await rules.exists()) {
-      await for (final entity in rules.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File) continue;
-        final rel = p
-            .relative(entity.path, from: dataDir)
-            .replaceAll('\\', '/');
-        files[rel] = await entity.readAsBytes();
-      }
+    // 整个数据目录都打包：设置、设备密钥、规则、词频、剪贴板、面板配置……
+    // 只跳过日志/缓存这类可重建的东西，以及上一次恢复留下的旧目录。
+    final files = await _collect(dataDir);
+    if (!files.containsKey('settings.json')) {
+      throw BackupException('数据目录里没有 settings.json，无法备份');
     }
     final payload = <String, dynamic>{
       'format': _version,
@@ -105,6 +91,34 @@ class BackupService {
       ],
     };
     return _seal(utf8.encode(jsonEncode(payload)), passphrase);
+  }
+
+  /// 需要跳过的目录：日志、缓存、运行时工作目录。
+  static const _skipDirs = {'logs', 'cache', 'tmp'};
+
+  /// 单个文件上限：超过的多半是内核或缓存，没必要塞进备份。
+  static const _maxFileBytes = 32 * 1024 * 1024;
+
+  static Future<Map<String, List<int>>> _collect(String dataDir) async {
+    final out = <String, List<int>>{};
+    final root = Directory(dataDir);
+    if (!await root.exists()) return out;
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final rel = p.relative(entity.path, from: dataDir).replaceAll('\\', '/');
+      if (rel.contains('.backup-') || rel.contains('.restore-')) continue;
+      final parts = rel.split('/');
+      if (parts.any(_skipDirs.contains)) continue;
+      if (rel.endsWith('.log') || rel.endsWith('.db')) continue;
+      try {
+        final stat = await entity.stat();
+        if (stat.size > _maxFileBytes) continue;
+        out[rel] = await entity.readAsBytes();
+      } catch (_) {
+        // 单个文件读不出来就跳过，不要因此整包失败。
+      }
+    }
+    return out;
   }
 
   /// 校验口令并解析备份；口令错误或文件损坏都会抛出 [BackupException]。

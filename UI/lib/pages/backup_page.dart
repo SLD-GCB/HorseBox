@@ -54,8 +54,8 @@ class _BackupPageState extends State<BackupPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '包含订阅、SSH 主机、密码本、规则，以及全部设置（主题色、输入法偏好、DNS、分流等）；'
-                  '不包含内核和日志。备份文件用你设置的口令加密，可以放到任何位置。',
+                  '包含整个数据目录：订阅、SSH 主机、密码本、规则、全部设置，以及输入法词频、剪贴板历史等；'
+                  '不含内核、日志和缓存。备份文件用你设置的口令加密，可以放到任何位置。',
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.5,

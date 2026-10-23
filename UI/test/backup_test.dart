@@ -34,6 +34,7 @@ void main() {
         .writeAsString(base64Encode(keyBytes));
     await Directory(p.join(dataDir, 'rules')).create(recursive: true);
     await File(p.join(dataDir, 'rules', 'a.srs')).writeAsString('rule');
+    await File(p.join(dataDir, 'ime_learned.txt')).writeAsString('ni	你	8');
 
     final bytes = await BackupService.export(
       dataDir: dataDir,
@@ -46,6 +47,8 @@ void main() {
     expect(payload.profiles, 2);
     expect(payload.sshHosts, 1);
     expect(payload.files.containsKey('rules/a.srs'), isTrue);
+    // 整个数据目录都要进包，不只是 settings.json + rules
+    expect(payload.files.containsKey('ime_learned.txt'), isTrue);
     // 4.2 之后新增的偏好也要能在备份清单里看到
     expect(payload.themeMode, 'light');
     expect(payload.accent, 0xFF3B82F6);
