@@ -1,5 +1,7 @@
 # HorseBox
 
+本项目开发完成
+
 HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建 Windows 和 Android，配置和节点全部来自 HorseUI 面板的订阅接口，客户端本身不包含任何节点。
 
 - **Windows**：以子进程方式运行官方 `sing-box.exe`，支持 TUN 和混合端口，关闭窗口后驻留托盘。
