@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart' as cg;
 import 'package:path/path.dart' as p;
 
+import 'dpapi.dart';
+
 /// 备份/恢复用到的异常，消息直接展示给用户。
 class BackupException implements Exception {
   BackupException(this.message);
@@ -23,6 +25,7 @@ class BackupPayload {
     required this.counts,
     required this.preferences,
     required this.created,
+    this.dataDir = '',
   });
 
   final Map<String, List<int>> files;
@@ -31,6 +34,9 @@ class BackupPayload {
   /// 关键偏好（主题、输入法等），只为恢复前给用户看清楚，恢复本身靠 settings.json。
   final Map<String, dynamic> preferences;
   final DateTime? created;
+
+  /// 导出时所在的数据目录（Windows 可能是自定义路径），恢复时可以照原样放回去。
+  final String dataDir;
 
   int get profiles => counts['profiles'] ?? 0;
 
@@ -91,12 +97,14 @@ class BackupService {
     // 整个数据目录都打包：设置、设备密钥、规则、词频、剪贴板、面板配置……
     // 只跳过日志/缓存这类可重建的东西，以及上一次恢复留下的旧目录。
     final files = await _collect(dataDir);
+    await _unwrapForBackup(files);
     if (!files.containsKey('settings.json')) {
       throw BackupException('数据目录里没有 settings.json，无法备份');
     }
     final payload = <String, dynamic>{
       'format': _version,
       'created': DateTime.now().toIso8601String(),
+      'data_dir': dataDir,
       'counts': _counts(files['settings.json']!),
       'preferences': _preferences(files['settings.json']!),
       'entries': [
@@ -124,6 +132,7 @@ class BackupService {
       final parts = rel.split('/');
       if (parts.any(_skipDirs.contains)) continue;
       if (rel.endsWith('.log') || rel.endsWith('.db')) continue;
+      if (p.basename(rel) == 'ime_log.txt') continue;  // 输入法调试日志，没必要进备份
       try {
         final stat = await entity.stat();
         if (stat.size > _maxFileBytes) continue;
@@ -133,6 +142,31 @@ class BackupService {
       }
     }
     return out;
+  }
+
+  /// 备份里要放"换台机器也能用"的形态：DPAPI 密文只有本机本账户能解，
+  /// 所以导出前先拆掉这层壳（密钥、学习记录），再由备份本身的口令加密保护。
+  /// 恢复时不用反过来处理：App 启动读 secret.key、输入法第一次上屏写学习记录时，都会自动重新套壳。
+  static Future<void> _unwrapForBackup(Map<String, List<int>> files) async {
+    final key = files['secret.key'];
+    if (key != null) {
+      final text = utf8.decode(key, allowMalformed: true).trim();
+      if (text.startsWith('dpapi1:')) {
+        final plain = Dpapi.unprotect(base64Decode(text.substring(7)));
+        if (plain != null) files['secret.key'] = utf8.encode(base64Encode(plain));
+      }
+    }
+    final learned = files['ime_learned.txt'];
+    if (learned != null) {
+      final plain = Dpapi.unprotect(learned);
+      if (plain != null) files['ime_learned.txt'] = plain;
+    }
+    // 内核运行配置（含节点地址和密码）平时也是 DPAPI 密文
+    final core = files['core/config.json'];
+    if (core != null) {
+      final plain = Dpapi.unprotect(core);
+      if (plain != null) files['core/config.json'] = plain;
+    }
   }
 
   /// 校验口令并解析备份；口令错误或文件损坏都会抛出 [BackupException]。
@@ -176,6 +210,7 @@ class BackupService {
           ? Map<String, dynamic>.from(rawPreferences)
           : const {},
       created: DateTime.tryParse(decoded['created'] as String? ?? ''),
+      dataDir: (decoded['data_dir'] as String? ?? '').trim(),
     );
   }
 

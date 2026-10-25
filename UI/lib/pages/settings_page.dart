@@ -9,6 +9,7 @@ import 'settings_appearance_page.dart';
 import 'settings_core_page.dart';
 import 'settings_save_page.dart';
 import 'settings_ime_page.dart';
+import 'settings_ime_win_page.dart';
 import 'settings_proxy_page.dart';
 import 'settings_rules_page.dart';
 
@@ -82,10 +83,17 @@ class SettingsPage extends StatelessWidget {
             _EntryCard(
               icon: Icons.keyboard_alt_outlined,
               title: '内置输入法',
-              subtitle: state.settings.imeChinese
-                  ? '默认中文 · @@{state.settings.imeCandidates} 个候选'
-                  : '默认英文 · 可在键盘上切中文',
-              onTap: () => _open(context, SettingsImePage(state: state)),
+              subtitle: Platform.isWindows
+                  ? 'Windows 系统输入法 · 安装 / 启停 / 选项'
+                  : state.settings.imeChinese
+                      ? '默认中文 · ${state.settings.imeCandidates} 个候选'
+                      : '默认英文 · 可在键盘上切中文',
+              onTap: () => _open(
+                context,
+                Platform.isWindows
+                    ? const SettingsImeWinPage()
+                    : SettingsImePage(state: state),
+              ),
             ),
             const SizedBox(height: 10),
             _EntryCard(
