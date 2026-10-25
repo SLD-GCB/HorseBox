@@ -53,6 +53,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     private var chinese = ImePrefs.chinese
     private var nine = ImePrefs.layout == "nine"
     private var shift = false
+    private var capsLock = false
     private var asciiOnly = false
     private var clipboardMode = false
     private var expandedMode = false
@@ -120,6 +121,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         cursor = 0
         candidates = emptyList()
         shift = false
+        capsLock = false
         page = PAGE_LETTERS
         symbolPage = 0
         enBuffer = StringBuilder()
@@ -580,10 +582,26 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         hRow(
             buildList {
                 add(
-                    textKey("⇧", flex = 2f, accent = shift, size = 17f) {
-                        shift = !shift
+                textKey(
+                    "⇧",
+                    flex = 2f,
+                    accent = capsLock || shift,
+                    size = 17f,
+                    onLongPress = {
+                        // 长按锁定大写，再点一下恢复小写
+                        capsLock = true
+                        shift = false
                         rebuildKeys()
                     },
+                ) {
+                    if (capsLock) {
+                        capsLock = false
+                        shift = false
+                    } else {
+                        shift = !shift
+                    }
+                    rebuildKeys()
+                },
                 )
                 ROW_Z.forEach { add(letterKey(it)) }
                 add(textKey("⌫", flex = 2f, size = 18f) { backspace() })
@@ -617,7 +635,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             hRow(listOf(digit("7"), digit("8"), digit("9"))),
             hRow(
                 listOf(
-                    digit("，"),
+                    digit(if (chinese) "，" else ","),
                     digit("0"),
                     textKey("⌫", size = 20f) { backspace() },
                 ),
@@ -802,8 +820,9 @@ class ImeBoard(context: Context) : LinearLayout(context) {
     }
 
     private fun letterKey(char: String): View {
-        val marks = PUNCT[char]
-        val label = if (!chinese && shift) char.uppercase() else char
+        val marks = if (chinese) PUNCT[char] else PUNCT_EN[char]
+        val upper = !chinese && (shift || capsLock)
+        val label = if (upper) char.uppercase() else char
         val box = LinearLayout(context).apply {
             orientation = VERTICAL
             gravity = Gravity.CENTER
@@ -839,7 +858,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             false,
             onTap = {
                 typeText(label)
-                if (!chinese && shift) {
+                if (!chinese && shift && !capsLock) {
                     shift = false
                     rebuildKeys()
                 }
@@ -1475,6 +1494,7 @@ class ImeBoard(context: Context) : LinearLayout(context) {
         commitPending()
         chinese = !chinese
         shift = false
+        capsLock = false
         page = PAGE_LETTERS
         rebuildTopBar()
         rebuildCandidateBar()
@@ -1600,6 +1620,36 @@ class ImeBoard(context: Context) : LinearLayout(context) {
             "b" to listOf("\u3220", "\u3221", "\u3222"),
             "n" to listOf("\u2160", "\u2161", "\u2162"),
             "m" to listOf("\u25A0", "\u25A1", "\u25CF", "\u25CB"),
+        )
+
+        /** 英文模式长按字母弹出的半角标点，键位与 PUNCT 对应。 */
+        private val PUNCT_EN = mapOf(
+            "q" to listOf("\"", "'", "~"),
+            "w" to listOf(",", ";", ":"),
+            "e" to listOf(".", ":", ";"),
+            "r" to listOf("!", "?", "!?"),
+            "t" to listOf("\"", "'"),
+            "y" to listOf(">", "<", "^", "v"),
+            "u" to listOf("(", ")", "[", "]"),
+            "i" to listOf("{", "}", "[", "]"),
+            "o" to listOf("<", ">"),
+            "p" to listOf("-", "_"),
+            "a" to listOf("~", "_", "."),
+            "s" to listOf("+", "-", "*", "/"),
+            "d" to listOf("=", "!=", "~="),
+            "f" to listOf("%", "‰", "‱"),
+            "g" to listOf("$", "€", "£"),
+            "h" to listOf("#", "&", "*"),
+            "j" to listOf("@", "^", "|"),
+            "k" to listOf("<", ">", "<=", ">="),
+            "l" to listOf("/", "\\"),
+            "z" to listOf("1", "2", "3"),
+            "x" to listOf("4", "5", "6"),
+            "c" to listOf("7", "8", "9"),
+            "v" to listOf("0", "(", ")"),
+            "b" to listOf("[", "]", "{"),
+            "n" to listOf("I", "II", "III"),
+            "m" to listOf("*", "#", "•", "○"),
         )
         private val SYMBOL_CATEGORIES = listOf(
             "中文" to listOf(
