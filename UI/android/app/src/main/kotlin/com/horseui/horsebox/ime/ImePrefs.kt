@@ -1,15 +1,19 @@
 package com.horseui.horsebox.ime
 
 import android.content.Context
+import org.json.JSONObject
+import java.io.File
 
 /**
  * 系统输入法的偏好。
  *
  * Flutter 的设置页是唯一的入口：它把当前配置通过 MethodChannel 推下来，
- * 这里只负责落到 SharedPreferences，输入法启动时读一次。
+ * 这里只负责落到 filesDir/ime_prefs.json，输入法启动时读一次。
  */
 object ImePrefs {
-    private const val FILE = "horsebox_ime"
+    /** 设置存成一个 json，和 ime_learned.txt 一起落在 filesDir 里，随备份走。 */
+    private const val FILE_NAME = "ime_prefs.json"
+    private const val LEGACY_PREFS = "horsebox_ime"
 
     @Volatile
     var chinese: Boolean = false
@@ -119,136 +123,174 @@ object ImePrefs {
         private set
 
     fun load(context: Context) {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        chinese = prefs.getBoolean("chinese", false)
-        layout = if (prefs.getString("layout", "full") == "nine") "nine" else "full"
-        fuzzy = prefs.getBoolean("fuzzy", true)
-        sentence = prefs.getBoolean("sentence", true)
-        candidates = prefs.getInt("candidates", 5).coerceIn(3, 9)
-        heightDp = prefs.getInt("height", 282).coerceIn(200, 420)
-        scale = prefs.getFloat("scale", 1f).coerceIn(0.85f, 1.35f)
-        learn = prefs.getBoolean("learn", true)
-        clipboard = prefs.getBoolean("clipboard", true)
-        accent = prefs.getInt("accent", 0xFF4C8F6F.toInt())
-        accentMode = prefs.getString("accent_mode", "app") ?: "app"
-        customAccent = prefs.getInt("accent_custom", 0xFF4C8F6F.toInt())
-        themeMode = prefs.getString("app_theme_mode", "dark") ?: "dark"
-        darkMode = prefs.getString("dark_mode", "app") ?: "app"
-        sound = prefs.getBoolean("sound", false)
-        vibrate = prefs.getBoolean("vibrate", true)
-        vibrateAmplitude = prefs.getInt("vibrate_amp", 140).coerceIn(20, 255)
-        script = if (prefs.getString("script", "sc") == "tc") "tc" else "sc"
-        autocorrect = prefs.getBoolean("autocorrect", true)
-        customPalette = prefs.getBoolean("custom_palette", false)
-        paletteBg = prefs.getInt("palette_bg", 0xFF1B1C1E.toInt())
-        paletteKey = prefs.getInt("palette_key", 0xFF35373C.toInt())
-        paletteText = prefs.getInt("palette_text", 0xFFEDEDEF.toInt())
+        val file = File(context.filesDir, FILE_NAME)
+        if (file.exists()) {
+            try {
+                val raw = file.readText().trim()
+                val plain = ImeCrypt.open(context, raw)
+                if (plain.isEmpty()) return
+                val obj = JSONObject(plain)
+                val map = HashMap<String, Any?>()
+                for (key in obj.keys()) map[key] = obj.get(key)
+                fromMap(map)
+                // 老版本是明文 json，读一次就改存密文
+                if (!raw.startsWith("enc1:")) save(context)
+                return
+            } catch (_: Exception) {
+                // 文件坏了就退回默认值，别让输入法起不来
+            }
+        }
+        // 更老的版本存在 SharedPreferences 里，第一次读就迁到文件
+        val legacy = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+        if (legacy.all.isNotEmpty()) {
+            fromMap(legacy.all)
+            save(context)
+        }
+    }
+
+    /** 保存当前全部设置项，和 ime_learned.txt 一起进备份。 */
+    fun save(context: Context) {
+        try {
+            val obj = JSONObject()
+            for ((key, value) in toMap()) obj.put(key, value)
+            val sealed = ImeCrypt.sealOrNull(context, obj.toString()) ?: return
+            File(context.filesDir, FILE_NAME).writeText(sealed)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun toMap(): Map<String, Any?> = mapOf(
+        "chinese" to chinese,
+        "layout" to layout,
+        "fuzzy" to fuzzy,
+        "sentence" to sentence,
+        "candidates" to candidates,
+        "height" to heightDp,
+        "scale" to scale,
+        "learn" to learn,
+        "clipboard" to clipboard,
+        "accent" to accent,
+        "accent_mode" to accentMode,
+        "accent_custom" to customAccent,
+        "app_theme_mode" to themeMode,
+        "dark_mode" to darkMode,
+        "sound" to sound,
+        "vibrate" to vibrate,
+        "vibrate_amp" to vibrateAmplitude,
+        "script" to script,
+        "autocorrect" to autocorrect,
+        "custom_palette" to customPalette,
+        "palette_bg" to paletteBg,
+        "palette_key" to paletteKey,
+        "palette_text" to paletteText,
+    )
+
+    private fun fromMap(m: Map<String, Any?>) {
+        chinese = m["chinese"] as? Boolean ?: false
+        layout = if (m["layout"] as? String == "nine") "nine" else "full"
+        fuzzy = m["fuzzy"] as? Boolean ?: true
+        sentence = m["sentence"] as? Boolean ?: true
+        candidates = ((m["candidates"] as? Number)?.toInt() ?: 5).coerceIn(3, 9)
+        heightDp = ((m["height"] as? Number)?.toInt() ?: 282).coerceIn(200, 420)
+        scale = ((m["scale"] as? Number)?.toFloat() ?: 1f).coerceIn(0.85f, 1.35f)
+        learn = m["learn"] as? Boolean ?: true
+        clipboard = m["clipboard"] as? Boolean ?: true
+        accent = (m["accent"] as? Number)?.toInt() ?: 0xFF4C8F6F.toInt()
+        accentMode = when (m["accent_mode"] as? String) {
+            "system", "custom" -> m["accent_mode"] as String
+            else -> "app"
+        }
+        customAccent = (m["accent_custom"] as? Number)?.toInt() ?: 0xFF4C8F6F.toInt()
+        themeMode = m["app_theme_mode"] as? String ?: "dark"
+        darkMode = if (m["dark_mode"] as? String == "system") "system" else "app"
+        sound = m["sound"] as? Boolean ?: false
+        vibrate = m["vibrate"] as? Boolean ?: true
+        vibrateAmplitude = ((m["vibrate_amp"] as? Number)?.toInt() ?: 140).coerceIn(20, 255)
+        script = if (m["script"] as? String == "tc") "tc" else "sc"
+        autocorrect = m["autocorrect"] as? Boolean ?: true
+        customPalette = m["custom_palette"] as? Boolean ?: false
+        paletteBg = (m["palette_bg"] as? Number)?.toInt() ?: 0xFF1B1C1E.toInt()
+        paletteKey = (m["palette_key"] as? Number)?.toInt() ?: 0xFF35373C.toInt()
+        paletteText = (m["palette_text"] as? Number)?.toInt() ?: 0xFFEDEDEF.toInt()
     }
 
     /** 返回是否真的有变化，输入法据此决定要不要刷新。 */
     fun update(context: Context, values: Map<*, *>): Boolean {
         val before = snapshot()
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
         (values["chinese"] as? Boolean)?.let {
             chinese = it
-            editor.putBoolean("chinese", it)
         }
         (values["layout"] as? String)?.let {
             layout = if (it == "nine") "nine" else "full"
-            editor.putString("layout", layout)
         }
         (values["fuzzy"] as? Boolean)?.let {
             fuzzy = it
-            editor.putBoolean("fuzzy", it)
         }
         (values["sentence"] as? Boolean)?.let {
             sentence = it
-            editor.putBoolean("sentence", it)
         }
         (values["candidates"] as? Number)?.let {
             candidates = it.toInt().coerceIn(3, 9)
-            editor.putInt("candidates", candidates)
         }
         (values["height"] as? Number)?.let {
             heightDp = it.toInt().coerceIn(200, 420)
-            editor.putInt("height", heightDp)
         }
         (values["scale"] as? Number)?.let {
             scale = it.toFloat().coerceIn(0.85f, 1.35f)
-            editor.putFloat("scale", scale)
         }
         (values["learn"] as? Boolean)?.let {
             learn = it
-            editor.putBoolean("learn", it)
         }
         (values["clipboard"] as? Boolean)?.let {
             clipboard = it
-            editor.putBoolean("clipboard", it)
         }
         (values["accent"] as? Number)?.let {
             accent = it.toInt()
-            editor.putInt("accent", accent)
         }
         (values["accentMode"] as? String)?.let {
             accentMode = if (it == "system" || it == "custom") it else "app"
-            editor.putString("accent_mode", accentMode)
         }
         (values["accentColor"] as? Number)?.let {
             customAccent = it.toInt()
-            editor.putInt("accent_custom", customAccent)
         }
         (values["themeMode"] as? String)?.let {
             themeMode = it
-            editor.putString("app_theme_mode", it)
         }
         (values["darkMode"] as? String)?.let {
             darkMode = if (it == "system") "system" else "app"
-            editor.putString("dark_mode", darkMode)
         }
         (values["sound"] as? Boolean)?.let {
             sound = it
-            editor.putBoolean("sound", it)
         }
         (values["vibrate"] as? Boolean)?.let {
             vibrate = it
-            editor.putBoolean("vibrate", it)
         }
         (values["autocorrect"] as? Boolean)?.let {
             autocorrect = it
-            editor.putBoolean("autocorrect", it)
         }
         (values["customPalette"] as? Boolean)?.let {
             customPalette = it
-            editor.putBoolean("custom_palette", it)
         }
         (values["paletteBg"] as? Number)?.let {
             paletteBg = it.toInt()
-            editor.putInt("palette_bg", paletteBg)
         }
         (values["paletteKey"] as? Number)?.let {
             paletteKey = it.toInt()
-            editor.putInt("palette_key", paletteKey)
         }
         (values["paletteText"] as? Number)?.let {
             paletteText = it.toInt()
-            editor.putInt("palette_text", paletteText)
         }
         (values["vibrateAmplitude"] as? Number)?.let {
             vibrateAmplitude = it.toInt().coerceIn(20, 255)
-            editor.putInt("vibrate_amp", vibrateAmplitude)
         }
-        editor.apply()
+        save(context)
         return before != snapshot()
     }
 
     /** 简繁切换要立即生效，所以单独提供写入口。 */
     fun setScript(context: Context, value: String) {
         script = if (value == "tc") "tc" else "sc"
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .edit()
-            .putString("script", script)
-            .apply()
+        save(context)
     }
 
     private fun snapshot(): List<Any> =
