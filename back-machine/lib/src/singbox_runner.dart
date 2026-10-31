@@ -8,22 +8,14 @@ import 'package:path/path.dart' as p;
 ///
 /// Android 走 VpnService + libbox，不使用这个类。
 class SingBoxRunner {
-  SingBoxRunner({
-    required this.binaryPath,
-    required this.workDir,
-    this.encrypt,
-  });
+  SingBoxRunner({required this.binaryPath, required this.workDir});
 
   final String binaryPath;
   final String workDir;
 
-  /// 落盘配置的加密（Windows 传 DPAPI）。为 null 时保持明文，仅供调试。
-  final List<int>? Function(List<int>)? encrypt;
-
   final StreamController<String> _logs = StreamController<String>.broadcast();
   final StreamController<int> _exits = StreamController<int>.broadcast();
   Process? _process;
-  File? _runtimeFile;
   StreamSubscription<String>? _stdoutSub;
   StreamSubscription<String>? _stderrSub;
 
@@ -35,36 +27,17 @@ class SingBoxRunner {
     final dir = Directory(workDir);
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    // 落盘的 config.json 里是节点地址和密码，不留明文：加密保存一份，内核吃的临时文件跑完就删
     final configFile = File(p.join(workDir, 'config.json'));
-    final seal = encrypt;
-    if (seal != null) {
-      final sealed = seal(utf8.encode(configJson));
-      if (sealed != null) {
-        await configFile.writeAsBytes(sealed, flush: true);
-      }
-    } else {
-      await configFile.writeAsString(configJson, flush: true);
-    }
-
-    await _sweepRuntimeConfigs();
+    await configFile.writeAsString(configJson, flush: true);
 
     await killStale(clashPort: clashPort, workDir: workDir);
 
-    final runtime = File(p.join(workDir, 'config-${DateTime.now().microsecondsSinceEpoch}.json'));
-    await runtime.writeAsString(configJson, flush: true);
-    _runtimeFile = runtime;
-
     final process = await Process.start(
       binaryPath,
-      ['run', '-c', runtime.path],
+      ['run', '-c', configFile.path],
       workingDirectory: workDir,
       runInShell: false,
     );
-
-    // 内核是异步启动的：必须等它真把配置读进去（Clash 端口能应答）再删，
-    // 删早了内核会报 "cannot find the file specified" 直接起不来
-    unawaited(_wipeAfterReady(runtime, clashPort));
     _process = process;
     _emit('内核已启动，PID ${process.pid}');
 
@@ -86,9 +59,6 @@ class SingBoxRunner {
         if (!_exits.isClosed) _exits.add(code);
         await _cleanupSubscriptions();
         await _removePidFile();
-        final rt = _runtimeFile;
-        _runtimeFile = null;
-        if (rt != null) await _wipe(rt);
       }),
     );
 
@@ -107,9 +77,6 @@ class SingBoxRunner {
     }
     await _cleanupSubscriptions();
     await _removePidFile();
-    final rt = _runtimeFile;
-    _runtimeFile = null;
-    if (rt != null) await _wipe(rt);
   }
 
   /// 清理上一轮残留的内核，只杀真正占着 Clash 端口的那个进程。
@@ -194,56 +161,6 @@ class SingBoxRunner {
 
   /// 探测某个端口上是不是 sing-box（用于等待内核就绪）。
   static Future<bool> isAlive(int port) => _probeClash(port);
-
-  /// 等内核真的起来了再删临时明文配置；没起来就留着，下次启动前统一清理。
-  Future<void> _wipeAfterReady(File file, int clashPort) async {
-    for (var i = 0; i < 90; i++) {
-      if (await isAlive(clashPort)) break;
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-    if (!await isAlive(clashPort)) {
-      _emit('内核未就绪，临时配置保留到下次启动');
-      return;
-    }
-    await Future<void>.delayed(const Duration(seconds: 1));
-    await _wipe(file);
-  }
-
-  /// 内核起来后删掉临时明文配置；被占用就重试几秒。
-  Future<void> _wipe(File file) async {
-    for (var i = 0; i < 25; i++) {
-      try {
-        if (await file.exists()) await file.delete();
-        if (!await file.exists()) return;
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    }
-    _emit('临时配置未能删除，下次启动会清理');
-  }
-
-  /// 清掉上次崩溃留下的明文临时配置。
-  Future<void> _sweepRuntimeConfigs() async {
-    try {
-      final dir = Directory(workDir);
-      if (!await dir.exists()) return;
-      await for (final entity in dir.list(followLinks: false)) {
-        final name = p.basename(entity.path);
-        if (entity is! File) continue;
-        if (!name.startsWith('config-') || !name.endsWith('.json')) continue;
-        // 一分钟内的不删：可能是刚启动、内核还没读完的那个
-        final stamp = int.tryParse(
-          name.substring(7, name.length - 5),
-        );
-        if (stamp != null) {
-          final age = DateTime.now().microsecondsSinceEpoch - stamp;
-          if (age < const Duration(seconds: 60).inMicroseconds) continue;
-        }
-        try {
-          await entity.delete();
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
 
   Future<void> _writePidFile(int pid, int clashPort) async {
     final file = File(p.join(workDir, 'horsebox-core.pid'));

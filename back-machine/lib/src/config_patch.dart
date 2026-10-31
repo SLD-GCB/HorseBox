@@ -104,6 +104,23 @@ String patchClientConfig(String raw, ClientConfigOptions opts) {
     inbounds.removeWhere((item) => item['type'] == 'tun');
   }
 
+  // TUN 的 auto_route 会把内核自己到代理服务器的 UDP 也抓进去，形成回环。
+  // 把服务器地址排除在 TUN 路由之外，否则天马/QUIC 出站会自己套自己。
+  final tunInbound = inbounds.where((item) => item['type'] == 'tun').firstOrNull;
+  if (tunInbound != null) {
+    final servers = _asList(root['outbounds'])
+        .whereType<Map>()
+        .map((item) => item['server'])
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .map((value) => value.contains(':') ? '[$value]/128' : '$value/32')
+        .toSet()
+        .toList();
+    if (servers.isNotEmpty) {
+      tunInbound['route_exclude_address'] = servers;
+    }
+  }
+
   inbounds.add(<String, dynamic>{
     'type': 'mixed',
     'tag': 'mixed-in',

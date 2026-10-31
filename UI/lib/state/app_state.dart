@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:horsebox_backend/horsebox_backend.dart';
 
-import '../security/dpapi.dart';
 import '../security/secret_vault.dart';
 
 import 'package:path/path.dart' as p;
@@ -570,7 +569,6 @@ class AppState extends ChangeNotifier {
         final runner = SingBoxRunner(
           binaryPath: resolveCoreBinary(),
           workDir: p.join(_dataDir, 'core'),
-          encrypt: Dpapi.protect,
         );
         _runner = runner;
         _processLogSub = runner.logs.map(LogEntry.parse).listen(_appendLog);
@@ -839,22 +837,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// 敏感字段落盘前加密。密钥不可用时直接报错，绝不把明文写进配置。
+  /// 敏感字段落盘前加密；拿不到系统凭据仓库时退回明文。
   Future<String> _seal(String plain) async {
-    if (plain.isEmpty) return plain;
     final vault = _vault;
-    if (vault == null) {
-      throw StateError('密钥不可用，已取消保存，避免明文落盘');
-    }
+    if (vault == null || plain.isEmpty) return plain;
     return vault.seal(plain);
   }
 
   Future<String> _unseal(String stored) async {
-    if (stored.isEmpty) return stored;
     final vault = _vault;
-    if (vault == null) {
-      return SecretVault.isSealed(stored) ? '' : stored;
-    }
+    if (vault == null || stored.isEmpty) return stored;
     return vault.openText(stored);
   }
 

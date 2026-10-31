@@ -3,11 +3,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 
 import '../security/data_backup.dart';
 import '../state/app_state.dart';
-import '../utils/app_paths.dart';
 import '../utils/format.dart';
 import '../widgets/masked_field.dart';
 import '../widgets/password_keyboard.dart';
@@ -169,25 +167,9 @@ class _BackupPageState extends State<BackupPage> {
         passphrase: passphrase,
       );
       if (!mounted) return;
-      final decision = await _confirmRestore(payload);
-      if (decision == null || !decision.ok) return;
-      var target = _state.dataDir;
-      if (decision.relocate && payload.dataDir.isNotEmpty) {
-        target = p.normalize(payload.dataDir);
-        await Directory(p.dirname(target)).create(recursive: true);
-      }
-      try {
-        await BackupService.apply(dataDir: target, payload: payload);
-      } catch (e) {
-        if (target == _state.dataDir) rethrow;
-        // 原目录不可用（盘符不存在、没权限）就退回当前目录
-        target = _state.dataDir;
-        if (mounted) _toast('原数据目录不可用，已恢复到当前目录');
-        await BackupService.apply(dataDir: target, payload: payload);
-      }
-      if (Platform.isWindows && target != _state.dataDir) {
-        await writeWindowsDataDir(target);   // 记住位置，重启后按这里加载
-      }
+      final ok = await _confirmRestore(payload);
+      if (ok != true) return;
+      await BackupService.apply(dataDir: _state.dataDir, payload: payload);
       if (!mounted) return;
       await _finishAndExit();
     } catch (e) {
@@ -266,82 +248,54 @@ class _BackupPageState extends State<BackupPage> {
     return result;
   }
 
-  Future<({bool ok, bool relocate})?> _confirmRestore(BackupPayload payload) {
+  Future<bool?> _confirmRestore(BackupPayload payload) {
     final created = payload.created;
-    final current = _state.dataDir;
-    final recorded = payload.dataDir;
-    // Windows 上备份可能来自自定义数据目录：路径不同才给选项
-    final canRelocate = Platform.isWindows &&
-        recorded.isNotEmpty &&
-        p.normalize(recorded).toLowerCase() != p.normalize(current).toLowerCase();
-    var relocate = canRelocate;
-    return showDialog<({bool ok, bool relocate})>(
+    return showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('确认恢复'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      builder: (context) => AlertDialog(
+        title: const Text('确认恢复'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '将覆盖当前全部数据：'
+                '${payload.profiles} 个订阅、${payload.sshHosts} 台 SSH 主机、'
+                '${payload.credentials} 条密码本记录。',
+                style: const TextStyle(fontSize: 12, height: 1.6),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '包含偏好：${_preferenceLabel(payload)}',
+                style: const TextStyle(fontSize: 11.5),
+              ),
+              if (created != null) ...[
+                const SizedBox(height: 4),
                 Text(
-                  '将覆盖当前全部数据：'
-                  '${payload.profiles} 个订阅、${payload.sshHosts} 台 SSH 主机、'
-                  '${payload.credentials} 条密码本记录。',
-                  style: const TextStyle(fontSize: 12, height: 1.6),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '包含偏好：${_preferenceLabel(payload)}',
+                  '备份时间：${created.toLocal()}',
                   style: const TextStyle(fontSize: 11.5),
                 ),
-                if (created != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '备份时间：${created.toLocal()}',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
-                ],
-                if (canRelocate) ...[
-                  const SizedBox(height: 10),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: relocate,
-                    onChanged: (v) => setLocal(() => relocate = v ?? false),
-                    title: const Text(
-                      '恢复到备份原来的数据目录',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(recorded,
-                        style: const TextStyle(fontSize: 11)),
-                  ),
-                  Text('当前目录：$current',
-                      style: const TextStyle(fontSize: 11)),
-                ],
-                const SizedBox(height: 10),
-                const Text(
-                  '当前数据会被改名保留在数据目录旁边，不会删除。',
-                  style: TextStyle(fontSize: 11.5),
-                ),
               ],
-            ),
+              const SizedBox(height: 10),
+              const Text(
+                '当前数据会被改名保留在数据目录旁边，不会删除。',
+                style: TextStyle(fontSize: 11.5),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop((ok: true, relocate: relocate)),
-              child: const Text('覆盖并恢复'),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('覆盖并恢复'),
+          ),
+        ],
       ),
     );
   }

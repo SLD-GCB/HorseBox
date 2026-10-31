@@ -5,10 +5,9 @@ title HorseBox 打包
 rem 用法：
 rem   build-all.bat                 交互式，双端都打
 rem   build-all.bat win             只打 Windows（可跟版本号）
-rem   build-all.bat android 3.3     只打 Android，版本 3.3，元数据默认 33
-rem   build-all.bat android 3.3 3300  只打 Android，元数据就用 3300
-rem   build-all.bat all 3.3 3300    双端，版本 3.3，元数据 3300
-rem 环境变量：CLEAN=0 跳过 clean；NO_PAUSE=1 结束不暂停；BUILDNO=3300 等同第三个参数
+rem   build-all.bat android 3.3     只打 Android，版本 3.3
+rem   build-all.bat all 3.3         双端，版本 3.3
+rem 环境变量：CLEAN=0 跳过 clean；NO_PAUSE=1 结束不暂停
 
 set "ROOT=%~dp0"
 set "UI=%ROOT%UI"
@@ -23,19 +22,16 @@ set "FINDSTR=%SystemRoot%\System32\findstr.exe"
 rem ---------------------------------------------------------------- 参数
 set "TARGET=%~1"
 set "ARGVER="
-set "ARGBUILD="
 if /i "%TARGET%"=="all" goto :arg_ok
 if /i "%TARGET%"=="win" goto :arg_ok
 if /i "%TARGET%"=="android" goto :arg_ok
 rem 第一个参数不是目标平台：当成版本号，目标默认双端
 set "TARGET=all"
 set "ARGVER=%~1"
-set "ARGBUILD=%~2"
 goto :arg_done
 
 :arg_ok
 set "ARGVER=%~2"
-set "ARGBUILD=%~3"
 
 :arg_done
 echo ============================================
@@ -100,17 +96,9 @@ if not defined VER (
   set /p "VER=输入版本号（回车默认 %DEFVER%）: "
 )
 if not defined VER set "VER=%DEFVER%"
-rem 元数据（versionCode）：第三个参数 > BUILDNO 环境变量 > 版本号去掉小数点
-set "BUILD="
-if defined ARGBUILD set "BUILD=%ARGBUILD%"
-if not defined BUILD if defined BUILDNO set "BUILD=%BUILDNO%"
-if not defined BUILD set "BUILD=%VER:.=%"
-echo %BUILD%| "%FINDSTR%" /r "^[0-9][0-9]*$" >nul
-if errorlevel 1 (
-  echo [错误] 元数据必须是纯数字，收到：%BUILD%
-  goto fail
-)
-echo [版本] %VER% (versionCode %BUILD%)
+set "BUILD=%VER:.=%"
+if defined BUILDNO set "BUILD=%BUILDNO%"
+echo [版本] %VER% (build %BUILD%)
 echo.
 
 if not exist "%DIST%" mkdir "%DIST%"
@@ -167,6 +155,11 @@ if errorlevel 1 (
 :skip_windows
 rem ---------------------------------------------------------------- Android
 if /i "%TARGET%"=="win" goto :skip_android
+if /i "%PUSH_FDROID%"=="1" (
+  echo [6] 推送到 F-Droid...
+  "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\push-fdroid.ps1" -Apk "%DIST%\HorseBox-%VER%-android-arm64.apk" -VersionCode "%VER%_%BUILD%"
+)
+
 
 echo [4] 构建 Android Release（arm64 + x86_64，按 ABI 分包）...
 call "%ROOT%android\sync-libbox.bat"
@@ -174,9 +167,7 @@ if errorlevel 1 (
   popd
   goto fail
 )
-rem -P force-version-code-ignoring-abi=true：不要 Flutter 按 ABI 给 versionCode 加偏移，
-rem 用户给多少就是多少（代价是各 ABI 的 APK 版本号相同，自建仓库无所谓）
-call "%FLUTTER%" build apk --release --no-tree-shake-icons --target-platform android-arm64,android-x64 --split-per-abi --build-name=%VER% --build-number=%BUILD% -P force-version-code-ignoring-abi=true
+call "%FLUTTER%" build apk --release --no-tree-shake-icons --target-platform android-arm64,android-x64 --split-per-abi --build-name=%VER% --build-number=%BUILD%
 if errorlevel 1 (
   popd
   goto fail
@@ -197,19 +188,6 @@ if errorlevel 1 (
   goto fail
 )
 
-rem [5.2] 确认 APK 里的 versionCode 就是要求的数字（Flutter 默认会按 ABI 加偏移）
-"%PS%" -NoProfile -Command "$m = Get-Content '%UI%\build\app\outputs\apk\release\output-metadata.json' -Raw | ConvertFrom-Json; $e = $m.elements | Where-Object { $_.filters.value -eq 'arm64-v8a' } | Select-Object -First 1; if ($e) { Write-Host ('[5.2] arm64 versionCode=' + $e.versionCode + ' / 要求 %BUILD%'); if ([int]$e.versionCode -ne %BUILD%) { Write-Host '[错误] versionCode 与要求不一致'; exit 1 } } else { Write-Host '[5.2] 找不到 arm64 输出，跳过校验' }"
-if errorlevel 1 (
-  popd
-  goto fail
-)
-
-
-rem [6] 发布：放在构建和校验之后，推上去的才是刚打出来的这个包
-if /i "%PUSH_FDROID%"=="1" (
-  echo [6] 推送到 F-Droid...
-  "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\push-fdroid.ps1" -Apk "%DIST%\HorseBox-%VER%-android-arm64.apk" -VersionCode "%VER%_%BUILD%"
-)
 
 :skip_android
 popd
