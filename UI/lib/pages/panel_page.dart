@@ -212,10 +212,14 @@ class _PanelPageState extends State<PanelPage> {
     final web = _web;
     if (web == null) return;
     try {
+      final otp = item.totpSecret.trim().isEmpty
+          ? ''
+          : PanelUsageClient.totpCode(item.totpSecret);
       final result = await web.evaluateJavascript(
         source: _fillScript(
           jsonEncode(item.username),
           jsonEncode(item.password),
+          jsonEncode(otp),
         ),
       );
       final filled = int.tryParse(result?.toString() ?? '') ?? 0;
@@ -223,7 +227,10 @@ class _PanelPageState extends State<PanelPage> {
       if (filled == 0) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('没找到登录框，请先打开面板的登录页')));
-      } else if (filled == 3) {
+      } else if ((filled & 4) != 0) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已填入账号、密码和动态码')));
+      } else if ((filled & 3) == 3) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('已填入账号和密码')));
       } else {
@@ -239,7 +246,7 @@ class _PanelPageState extends State<PanelPage> {
 
   // 注意：安卓上 _passwordFixScript 会把 type=password 改成 text 并画上圆点，
   // 所以这里不能再按 type=password 找密码框，否则永远只填得上账号。
-  String _fillScript(String user, String pass) =>
+  String _fillScript(String user, String pass, String otp) =>
       '''
 (function () {
   function setValue(el, value) {
@@ -276,9 +283,29 @@ class _PanelPageState extends State<PanelPage> {
   // 没有密码框说明当前不是登录页（仪表盘、用户管理这些页面也有输入框），
   // 这时宁可不填，也不要把账号打进搜索框里。
   if (!pwd) return 0;
+  var otpEl = null;
+  if ($otp) {
+    for (var j = 0; j < all.length; j += 1) {
+      var oe = all[j];
+      if (oe === usr || oe === pwd || oe.disabled) continue;
+      var ot = (oe.getAttribute('name') || '') + ' ' + (oe.id || '') +
+               ' ' + (oe.getAttribute('placeholder') || '') + ' ' + (oe.getAttribute('aria-label') || '');
+      ot = ot.toLowerCase();
+      var otType = (oe.getAttribute('type') || 'text').toLowerCase();
+      if (otType === 'hidden' || otType === 'checkbox' || otType === 'radio' ||
+          otType === 'submit' || otType === 'button') continue;
+      if (ot.indexOf('otp') >= 0 || ot.indexOf('2fa') >= 0 || ot.indexOf('code') >= 0 ||
+          ot.indexOf('two') >= 0 || ot.indexOf('动态') >= 0 ||
+          ot.indexOf('验证码') >= 0 || ot.indexOf('两步') >= 0) {
+        otpEl = oe;
+        break;
+      }
+    }
+  }
   var flags = 0;
   if (usr) { setValue(usr, $user); flags |= 1; }
   if (pwd) { setValue(pwd, $pass); flags |= 2; }
+  if (otpEl) { setValue(otpEl, $otp); flags |= 4; }
   if (usr) { usr.focus(); } else if (pwd) { pwd.focus(); }
   return flags;
 })();
