@@ -679,6 +679,7 @@ class PanelCredential {
     required this.panel,
     required this.username,
     this.password = '',
+    this.totpSecret = '',
   });
 
   final String id;
@@ -688,11 +689,15 @@ class PanelCredential {
   String username;
   String password;
 
+  /// 面板两步验证（TOTP）密钥；留空表示该面板未启用 2FA。
+  String totpSecret;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'panel': panel,
     'username': username,
     'password': password,
+    'totp_secret': totpSecret,
   };
 
   factory PanelCredential.fromJson(Map<String, dynamic> json) {
@@ -703,6 +708,7 @@ class PanelCredential {
       panel: json['panel'] as String? ?? '',
       username: json['username'] as String? ?? '',
       password: json['password'] as String? ?? '',
+      totpSecret: json['totp_secret'] as String? ?? '',
     );
   }
 }

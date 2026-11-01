@@ -24,6 +24,7 @@ class CredentialsPage extends StatelessWidget {
       panel: result.panel,
       username: result.username,
       password: result.password,
+      totpSecret: result.totpSecret,
     );
     if (error != null && context.mounted) {
       ScaffoldMessenger.of(context)
@@ -173,11 +174,13 @@ class _CredentialInput {
     required this.panel,
     required this.username,
     required this.password,
+    this.totpSecret = '',
   });
 
   final String panel;
   final String username;
   final String password;
+  final String totpSecret;
 }
 
 class _CredentialDialog extends StatefulWidget {
@@ -193,6 +196,7 @@ class _CredentialDialogState extends State<_CredentialDialog> {
   final _panel = TextEditingController();
   final _user = TextEditingController();
   final _password = MaskedTextController();
+  final _totp = TextEditingController();
   String? _error;
 
   bool get _editing => widget.initial != null;
@@ -205,6 +209,7 @@ class _CredentialDialogState extends State<_CredentialDialog> {
       _panel.text = initial.panel;
       _user.text = initial.username;
       _password.text = initial.password;
+      _totp.text = initial.totpSecret;
     }
   }
 
@@ -213,6 +218,7 @@ class _CredentialDialogState extends State<_CredentialDialog> {
     _panel.dispose();
     _user.dispose();
     _password.dispose();
+    _totp.dispose();
     PasswordKeyboard.hide();
     super.dispose();
   }
@@ -232,6 +238,7 @@ class _CredentialDialogState extends State<_CredentialDialog> {
         panel: panel,
         username: _user.text.trim(),
         password: _password.text,
+        totpSecret: _totp.text.trim(),
       ),
     );
   }
@@ -262,6 +269,13 @@ class _CredentialDialogState extends State<_CredentialDialog> {
               SecretField(
                 controller: _password,
                 label: '密码',
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              KeyField(
+                controller: _totp,
+                label: '两步验证密钥（可选）',
+                hint: '面板启用 2FA 时填写，用于自动生成动态码',
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[

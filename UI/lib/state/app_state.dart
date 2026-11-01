@@ -118,6 +118,7 @@ class AppState extends ChangeNotifier {
       for (final item in rawCredentials.whereType<Map>()) {
         final map = Map<String, dynamic>.from(item);
         map['password'] = await _unseal(map['password'] as String? ?? '');
+        map['totp_secret'] = await _unseal(map['totp_secret'] as String? ?? '');
         _credentials.add(PanelCredential.fromJson(map));
       }
     }
@@ -194,6 +195,7 @@ class AppState extends ChangeNotifier {
         password: credential.password,
         subToken: subToken,
         certPin: _pinFor(target),
+        totpSecret: credential.totpSecret,
       );
       _usage[target.id] = usage;
       _usageError.remove(target.id);
@@ -236,6 +238,7 @@ class AppState extends ChangeNotifier {
     required String panel,
     required String username,
     required String password,
+    String totpSecret = '',
   }) async {
     final key = normalizePanel(panel);
     if (key.isEmpty) return '请填写面板地址';
@@ -253,12 +256,14 @@ class AppState extends ChangeNotifier {
           panel: key,
           username: username.trim(),
           password: password,
+          totpSecret: totpSecret.trim(),
         ),
       );
     } else {
       existing.panel = key;
       existing.username = username.trim();
       existing.password = password;
+      existing.totpSecret = totpSecret.trim();
     }
     await _persistCredentials();
     _notify();
@@ -276,6 +281,7 @@ class AppState extends ChangeNotifier {
     for (final item in _credentials) {
       final row = item.toJson();
       row['password'] = await _seal(item.password);
+      row['totp_secret'] = await _seal(item.totpSecret);
       rows.add(row);
     }
     await _store.set(_kCredentials, rows);

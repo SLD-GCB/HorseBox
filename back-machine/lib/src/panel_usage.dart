@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart' as crypto;
 
 import 'pinned_http.dart' as pinned;
 
@@ -112,6 +115,7 @@ class PanelUsageClient {
     required String password,
     required String subToken,
     String certPin = '',
+    String totpSecret = '',
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final root = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
@@ -132,7 +136,7 @@ class PanelUsageClient {
     client.userAgent = 'HorseBox';
 
     try {
-      final token = await _login(client, root, username, password, timeout);
+      final token = await _login(client, root, username, password, totpSecret, timeout);
       final rows = await _clients(client, root, token, timeout);
       return _aggregate(rows, subToken);
     } on PanelUsageException {
@@ -155,34 +159,105 @@ class PanelUsageClient {
     String root,
     String username,
     String password,
+    String totpSecret,
     Duration timeout,
   ) async {
-    final request = await client
-        .postUrl(Uri.parse('$root/api/auth/login'))
-        .timeout(timeout);
+    final body = await _postJson(
+      client,
+      Uri.parse('$root/api/auth/login'),
+      {'username': username, 'password': password},
+      timeout,
+    );
+    final data = body['data'];
+    if (data is Map && data['two_factor_required'] == true) {
+      final challenge = data['challenge'];
+      if (challenge is! String || challenge.isEmpty) {
+        throw PanelUsageException('面板返回的两步验证信息不完整');
+      }
+      if (totpSecret.trim().isEmpty) {
+        throw PanelUsageException('面板已启用两步验证，请在设置里填写 TOTP 密钥');
+      }
+      final second = await _postJson(
+        client,
+        Uri.parse('$root/api/auth/login/2fa'),
+        {'challenge': challenge, 'code': totpCode(totpSecret)},
+        timeout,
+      );
+      return _tokenOf(second);
+    }
+    return _tokenOf(body);
+  }
+
+  static Future<Map<String, dynamic>> _postJson(
+    HttpClient client,
+    Uri uri,
+    Map<String, dynamic> payload,
+    Duration timeout,
+  ) async {
+    final request = await client.postUrl(uri).timeout(timeout);
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'username': username, 'password': password}));
+    request.write(jsonEncode(payload));
     final response = await request.close().timeout(timeout);
     final body = await response.transform(utf8.decoder).join().timeout(timeout);
 
     if (response.statusCode == HttpStatus.unauthorized ||
         response.statusCode == HttpStatus.forbidden) {
-      throw PanelUsageException('面板账号或密码不正确');
+      throw PanelUsageException('面板账号、密码或动态码不正确');
     }
     if (response.statusCode != HttpStatus.ok) {
       throw PanelUsageException('面板登录失败（HTTP ${response.statusCode}）');
     }
     final decoded = jsonDecode(body);
     if (decoded is! Map) throw PanelUsageException('面板登录返回格式不正确');
-    final data = decoded['data'];
-    final token = data is Map ? data['token'] : decoded['token'];
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  static String _tokenOf(Map<String, dynamic> body) {
+    final data = body['data'];
+    final token = data is Map ? data['token'] : body['token'];
     if (token is! String || token.isEmpty) {
-      final message = decoded['msg'];
+      final message = body['msg'];
       throw PanelUsageException(
         message is String && message.isNotEmpty ? message : '面板没有返回登录令牌',
       );
     }
     return token;
+  }
+
+  /// 生成 6 位 TOTP 动态码（SHA-1 / 30 秒 / 6 位）。
+  static String totpCode(String secret, {DateTime? now}) {
+    final key = _base32Decode(secret);
+    final seconds = (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch ~/ 1000;
+    final counter = seconds ~/ 30;
+    final message = ByteData(8)..setUint64(0, counter, Endian.big);
+    final digest = crypto.Hmac(crypto.sha1, key)
+        .convert(message.buffer.asUint8List())
+        .bytes;
+    final offset = digest[19] & 0x0f;
+    final binary = ((digest[offset] & 0x7f) << 24) |
+        (digest[offset + 1] << 16) |
+        (digest[offset + 2] << 8) |
+        digest[offset + 3];
+    return (binary % 1000000).toString().padLeft(6, '0');
+  }
+
+  static Uint8List _base32Decode(String secret) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    final input = secret.toUpperCase().replaceAll(RegExp(r'\s+'), '').replaceAll('=', '');
+    var buffer = 0;
+    var bits = 0;
+    final out = <int>[];
+    for (final char in input.split('')) {
+      final value = alphabet.indexOf(char);
+      if (value < 0) continue;
+      buffer = (buffer << 5) | value;
+      bits += 5;
+      if (bits >= 8) {
+        bits -= 8;
+        out.add((buffer >> bits) & 0xff);
+      }
+    }
+    return Uint8List.fromList(out);
   }
 
   static Future<List<Map<String, dynamic>>> _clients(
