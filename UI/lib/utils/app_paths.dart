@@ -15,21 +15,24 @@ String defaultWindowsDataDir() {
 /// 数据目录指针文件固定放在默认目录，避免自定义目录后找不到自己。
 File _pointerFile() => File(p.join(defaultWindowsDataDir(), 'bootstrap.json'));
 
-Future<String> resolveWindowsDataDir() async {
+/// 同步版：给必须立即拿到路径的地方用（比如输入法的 ime.ini / 词频文件）。
+String windowsDataDirSync() {
   final fallback = defaultWindowsDataDir();
   try {
     final file = _pointerFile();
-    if (!await file.exists()) return fallback;
-    final decoded = jsonDecode(await file.readAsString());
+    if (!file.existsSync()) return fallback;
+    final decoded = jsonDecode(file.readAsStringSync());
     if (decoded is! Map) return fallback;
     final custom = (decoded['data_dir'] as String? ?? '').trim();
     if (custom.isEmpty) return fallback;
-    if (!await Directory(custom).exists()) return fallback;
+    if (!Directory(custom).existsSync()) return fallback;
     return custom;
   } catch (_) {
     return fallback;
   }
 }
+
+Future<String> resolveWindowsDataDir() async => windowsDataDirSync();
 
 Future<void> writeWindowsDataDir(String dataDir) async {
   final fallback = defaultWindowsDataDir();

@@ -382,6 +382,20 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM /*lP
     LogF("OnKeyDown key=%u chinese=%d ctx=%p py=%d", (unsigned)wParam, _chinese ? 1 : 0, (void*)_context, (int)_pinyin.size());
     if (!_context) return S_OK;
 
+    // Git Bash（mintty）不把 Shift 的按下/抬起交给 TSF，但系统层仍然记录过。
+    // 每次收到其它键时查一次：Shift 在两次按键之间被按过且现在已松开，就补一次切换。
+    if (wParam != VK_SHIFT) {
+        SHORT shiftState = GetAsyncKeyState(VK_SHIFT);
+        if ((shiftState & 0x0001) != 0 && (shiftState & 0x8000) == 0) {
+            wchar_t cls[64] = {};
+            GetClassNameW(GetForegroundWindow(), cls, 64);
+            if (wcscmp(cls, L"mintty") == 0) {
+                LogLine("Shift tap fallback (mintty)");
+                CycleMode();
+            }
+        }
+    }
+
     bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     if (ctrl && wParam == VK_SPACE) {
         CycleMode();
@@ -392,6 +406,14 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM /*lP
     bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     bool win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
     if (ctrl || alt || win) return S_OK;
+
+    // 有些终端（Git Bash/mintty）不会把 Shift 抬起事件交给 TSF，
+    // 导致 _shiftDown 一直为真、模式切不过去。下一个按键时发现
+    // Shift 物理上已经松开，就补一次“Shift 单击”。
+    if (wParam != VK_SHIFT && _shiftDown && (GetKeyState(VK_SHIFT) & 0x8000) == 0) {
+        _shiftDown = false;
+        if (!_shiftUsed) CycleMode();
+    }
 
     if (wParam == VK_SHIFT) {
         _shiftDown = true;
@@ -406,7 +428,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM /*lP
         bool shifted = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         bool compose = _chinese || _englishSuggest;
         if (!compose || caps || shifted) {
-            if (!_pinyin.empty()) CommitSelected();   // 先把已经在输入的拼音上屏
+            if (!_pinyin.empty()) CommitAll();   // 先把已经在输入的拼音全部上屏
             return S_OK;
         }
         _pinyin.push_back((char)tolower((int)wParam));
@@ -485,7 +507,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM /*lP
         std::wstring punct;
         bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         if (MapChinesePunct(wParam, shift, _quoteToggle, punct)) {
-            if (!_pinyin.empty()) CommitSelected();
+            if (!_pinyin.empty()) CommitAll();
             CommitText(punct);
             *pfEaten = TRUE;
             return S_OK;
@@ -503,7 +525,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM /*lP
     }
 
     if (!_pinyin.empty()) {
-        CommitSelected();
+        CommitAll();
     }
     return S_OK;
 }
@@ -787,6 +809,7 @@ void CTextService::LoadConfig() {
     fclose(f);
     _pageSize = _candidateLimit;
     EngineBridge::Instance().SetOptions(_fuzzy, _sentence, _learn);
+    EngineBridge::Instance().SetTraditional(_traditional);
     ApplyWindowStyle();
     LogF("Config cand=%d fuzzy=%d sentence=%d learn=%d theme=%d", _candidateLimit,
          _fuzzy ? 1 : 0, _sentence ? 1 : 0, _learn ? 1 : 0, _themeDark ? 1 : 0);
@@ -874,11 +897,21 @@ void CTextService::CommitSelected() {
     int global = _cands.empty() ? -1 : std::min(_sel, (int)_cands.size() - 1);
     if (_chinese) {
         if (global < 0) return;
-        const std::wstring& raw = _cands[global].word;
-        EngineBridge::Instance().Learn(_pinyin, raw, global);
+        const EngCandidate& cand = _cands[global];
+        int used = cand.consumed > 0 ? cand.consumed : (int)_pinyin.size();
+        if (used > (int)_pinyin.size()) used = (int)_pinyin.size();
+        const std::string code = _pinyin.substr(0, used);
+        EngineBridge::Instance().Learn(code, cand.word, global);
         SaveLearningFile();  // 选完就落盘（加密），不靠退出时保存
-        std::wstring word = _traditional ? EngineBridge::Instance().ToTraditional(raw) : raw;
+        std::wstring word = _traditional ? EngineBridge::Instance().ToTraditional(cand.word) : cand.word;
         CommitText(word);
+        _pinyin = _pinyin.substr(used);   // 只消费这个词用掉的拼音，剩下的继续组词
+        if (_pinyin.empty()) {
+            ResetComposition();
+        } else {
+            UpdateCandidates();
+            RefreshWindow();
+        }
     } else {
         std::wstring word;
         if (global >= 0) {
@@ -887,8 +920,23 @@ void CTextService::CommitSelected() {
             word = Utf8ToWide(_pinyin);
         }
         CommitText(word);
+        ResetComposition();
     }
-    ResetComposition();
+}
+
+// 标点、大写字母、未知按键要离开组词状态：把剩下的拼音按候选逐段上屏，
+// 没有候选就原样上屏，避免残留半截拼音。
+void CTextService::CommitAll() {
+    int guard = 0;
+    while (!_pinyin.empty() && guard++ < 64) {
+        if (_cands.empty()) {
+            CommitText(Utf8ToWide(_pinyin));
+            ResetComposition();
+            return;
+        }
+        CommitSelected();
+    }
+    if (!_pinyin.empty()) ResetComposition();
 }
 
 void CTextService::CommitText(const std::wstring& text) {

@@ -35,9 +35,8 @@ object ImeCrypt {
         }
     }
 
-    /** 拿不到密钥就返回 null：调用方必须当作"不能落盘"，不许退回明文。 */
-    fun sealOrNull(context: Context, plain: String): String? {
-        val secret = key(context) ?: return null
+    fun seal(context: Context, plain: String): String {
+        val secret = key(context) ?: return plain
         return try {
             val iv = ByteArray(IV_LENGTH)
             SecureRandom().nextBytes(iv)
@@ -46,12 +45,9 @@ object ImeCrypt {
             val body = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
             PREFIX + Base64.encodeToString(iv + body, Base64.NO_WRAP)
         } catch (_: Throwable) {
-            null
+            plain
         }
     }
-
-    /** 兼容老调用：加不了密就原样返回（仅用于非敏感数据）。 */
-    fun seal(context: Context, plain: String): String = sealOrNull(context, plain) ?: plain
 
     fun open(context: Context, stored: String): String {
         if (!stored.startsWith(PREFIX)) return stored

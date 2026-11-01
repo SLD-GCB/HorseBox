@@ -84,6 +84,7 @@ private:
     void UpdateCandidates();
     void RefreshWindow();
     void CommitSelected();
+    void CommitAll();
     void CommitText(const std::wstring& text);
     bool GetCaretRect(RECT& out);
     std::wstring AppDir() const;

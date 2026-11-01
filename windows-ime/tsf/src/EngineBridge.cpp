@@ -36,6 +36,7 @@ bool EngineBridge::Load(const std::wstring& appDir) {
     _free = (FreeFn)GetProcAddress(_mod, "hb_free");
     _learn = (LearnFn)GetProcAddress(_mod, "hb_learn");
     _options = (OptionsFn)GetProcAddress(_mod, "hb_options");
+    _tradMode = (TradModeFn)GetProcAddress(_mod, "hb_set_traditional");
     _lload = (PathFn)GetProcAddress(_mod, "hb_learning_load");
     _lflush = (PathFn)GetProcAddress(_mod, "hb_learning_flush");
     _lcount = (CountFn)GetProcAddress(_mod, "hb_learning_count");
@@ -107,6 +108,11 @@ std::wstring EngineBridge::ToTraditional(const std::wstring& text) {
 void EngineBridge::SetOptions(bool fuzzy, bool sentence, bool learn) {
     if (!_ready || !_options) return;
     _options(fuzzy ? 1 : 0, sentence ? 1 : 0, learn ? 1 : 0);
+}
+
+void EngineBridge::SetTraditional(bool traditional) {
+    if (!_ready || !_tradMode) return;
+    _tradMode(traditional ? 1 : 0);
 }
 
 void EngineBridge::Learn(const std::string& code, const std::wstring& word, int position) {

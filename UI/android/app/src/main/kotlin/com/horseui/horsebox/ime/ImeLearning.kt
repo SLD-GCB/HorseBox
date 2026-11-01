@@ -35,13 +35,11 @@ object ImeLearning {
         try {
             val file = File(context.filesDir, FILE)
             if (!file.exists()) return
-            val plain = ImeCrypt.open(context, file.readText().trim())
-            if (plain.isEmpty()) return
-            for (line in plain.lineSequence()) {
+            file.forEachLine { line ->
                 val parts = line.split('\t')
-                if (parts.size < 3) continue
-                val count = parts[2].toIntOrNull() ?: continue
-                if (count <= 0) continue
+                if (parts.size < 3) return@forEachLine
+                val count = parts[2].toIntOrNull() ?: return@forEachLine
+                if (count <= 0) return@forEachLine
                 val last = if (parts.size >= 4) parts[3].toLongOrNull() ?: 0L else 0L
                 table[key(parts[0], parts[1])] = Entry(count, last)
             }
@@ -113,8 +111,7 @@ object ImeLearning {
                     .append(entry.last)
                     .append('\n')
             }
-            val sealed = ImeCrypt.sealOrNull(ctx, builder.toString()) ?: return
-            File(ctx.filesDir, FILE).writeText(sealed)
+            File(ctx.filesDir, FILE).writeText(builder.toString())
         } catch (_: Throwable) {
         }
     }

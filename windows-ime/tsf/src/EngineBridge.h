@@ -21,6 +21,7 @@ public:
     std::wstring ToTraditional(const std::wstring& text);
     // 模糊音 / 句子模式 / 词频记忆，对应设置页的三个开关
     void SetOptions(bool fuzzy, bool sentence, bool learn);
+    void SetTraditional(bool traditional);
     void Learn(const std::string& code, const std::wstring& word, int position);
     void LearningLoad(const std::wstring& path);
     void LearningFlush(const std::wstring& path);
@@ -40,6 +41,7 @@ private:
     using FreeFn = void (*)(char*);
     using LearnFn = void (*)(const char*, const char*, int);
     using OptionsFn = void (*)(int, int, int);
+    using TradModeFn = void (*)(int);
     using PathFn = void (*)(const char*);
     using CountFn = int (*)();
     using DumpFn = char* (*)();
@@ -51,6 +53,7 @@ private:
     FreeFn _free = nullptr;
     LearnFn _learn = nullptr;
     OptionsFn _options = nullptr;
+    TradModeFn _tradMode = nullptr;
     PathFn _lload = nullptr;
     PathFn _lflush = nullptr;
     CountFn _lcount = nullptr;

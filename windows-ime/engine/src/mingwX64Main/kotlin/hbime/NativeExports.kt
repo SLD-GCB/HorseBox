@@ -61,20 +61,46 @@ private fun toCString(s: String): CPointer<ByteVar>? {
     return ptr
 }
 
-@CName("hb_load")
-@OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
-fun hbLoad(dirPtr: CPointer<ByteVar>?): Int {
-    val dir = dirPtr?.toKString() ?: return -1
-    val dict = splitLines(readText("$dir/pinyin.tsv"))
-    val syl = splitLines(readText("$dir/syllables.txt"))
+private var dictDir: String? = null
+private var tradMode = false
+
+private fun loadDict(dir: String, traditional: Boolean): Int {
+    PinyinEngine.reset()
+    val name = if (traditional) "zh_tw.tsv" else "pinyin.tsv"
+    var dict = splitLines(readText("$dir/$name"))
+    if (dict.isEmpty() && traditional) {
+        dict = splitLines(readText("$dir/pinyin.tsv"))   // 繁体词库缺失时退回简体，至少能用
+    }
     if (dict.isEmpty()) return -2
+    val syl = splitLines(readText("$dir/syllables.txt"))
     PinyinEngine.load(dict, syl)
-    val en = splitLines(readText("$dir/en_words.tsv"))
-    if (en.isNotEmpty()) EnglishLexicon.load(en)
+    if (!EnglishLexicon.ready) {
+        val en = splitLines(readText("$dir/en_words.tsv"))
+        if (en.isNotEmpty()) EnglishLexicon.load(en)
+    }
     val st = splitLines(readText("$dir/st_chars.tsv"))
     if (st.isNotEmpty()) ScriptConverter.load(st)
     return PinyinEngine.entryCount
 }
+
+@CName("hb_load")
+@OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
+fun hbLoad(dirPtr: CPointer<ByteVar>?): Int {
+    val dir = dirPtr?.toKString() ?: return -1
+    dictDir = dir
+    return loadDict(dir, tradMode)
+}
+
+// 设置页切换繁体时调用：换一份独立词库，不和简体混用
+@CName("hb_set_traditional")
+@OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
+fun hbSetTraditional(value: Int) {
+    val next = value != 0
+    if (next == tradMode) return
+    tradMode = next
+    dictDir?.let { loadDict(it, next) }
+}
+
 
 @CName("hb_candidates")
 @OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)

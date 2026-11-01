@@ -27,6 +27,21 @@ object PinyinEngine {
     var entryCount: Int = 0
         private set
 
+    /** 切换简/繁词库前清空，允许用另一份词库重新 load。 */
+    fun reset() {
+        codes = emptyArray()
+        initials = emptyArray()
+        words = emptyArray()
+        weights = IntArray(0)
+        syllables.clear()
+        exactCache = null
+        fuzzyCache = null
+        t9Cache = null
+        topCache = null
+        ready = false
+        entryCount = 0
+    }
+
     /** 从已解析的行加载。dictLines 每行：code\tinitials\tword\tweight */
     fun load(dictLines: List<String>, syllableLines: List<String>) {
         if (ready) return
