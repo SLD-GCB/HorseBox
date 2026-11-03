@@ -2,6 +2,8 @@
 
 HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建 Windows 和 Android，配置和节点全部来自 HorseUI 面板的订阅接口，客户端本身不包含任何节点。
 
+内置协议：**SkyHorse（天马）第三代**（原生 QUIC：TCP 走 QUIC 流 + SOCKS5，UDP 走 QUIC DATAGRAM，外层 Salamander 混淆轮换 + 前置门）与 **FastHorse（快马）**（TCP/TLS/H2）。
+
 - **Windows**：以子进程方式运行官方 `sing-box.exe`，支持 TUN 和混合端口，关闭窗口后驻留托盘。
 - **Android**：通过 `libbox` + `VpnService` 接管流量，前台通知常驻，支持分应用代理。
 - **附带工具**：内置 SSH 终端（含 SFTP 与本地端口转发）、面板登录密码本，不用再另装工具。
@@ -74,14 +76,13 @@ UI/android/app/libs/libbox.aar
 
 ### 2. sing-box.exe（Windows）
 
-从 sing-box 官方 Release 下载 `sing-box-<版本>-windows-amd64.zip`，把以下文件放到：
+从构建产物复制 `sing-box.exe`（内置 SkyHorse 第三代 / FastHorse）到：
 
 ```
 core/sing-box.exe
-core/libcronet.dll
 ```
 
-`libcronet.dll` 必须与 `sing-box.exe` 同目录，缺少它内核无法启动。
+三代天马和快马均为纯 Go 实现，不需要 `libcronet.dll`。
 
 ## 构建
 
