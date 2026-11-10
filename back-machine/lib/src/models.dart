@@ -47,6 +47,40 @@ class Profile {
   }
 }
 
+/// 一个 IP 养护目标（面板地址 + 证书指纹 + 专用令牌）。
+class IpCareTarget {
+  IpCareTarget({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.pin,
+    required this.token,
+  });
+
+  final String id;
+  String name;
+  String url;
+  String pin;
+  String token;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'url': url,
+        'pin': pin,
+        'token': token,
+      };
+
+  factory IpCareTarget.fromJson(Map<String, dynamic> json) => IpCareTarget(
+        id: json['id'] as String? ??
+            DateTime.now().microsecondsSinceEpoch.toString(),
+        name: json['name'] as String? ?? '未命名服务器',
+        url: json['url'] as String? ?? '',
+        pin: json['pin'] as String? ?? '',
+        token: json['token'] as String? ?? '',
+      );
+}
+
 /// 全局设置。
 class AppSettings {
   const AppSettings({
@@ -93,6 +127,8 @@ class AppSettings {
     this.logLimit = 800,
     this.panelUrl = '',
     this.panelPin = '',
+    this.ipCareToken = '',
+    this.ipCareTargets = const [],
   });
 
   final int mixedPort;
@@ -181,6 +217,12 @@ class AppSettings {
   final String panelUrl;
   final String panelPin;
 
+  /// 面板生成的 IP 养护专用 API 令牌。
+  final String ipCareToken;
+
+  /// IP 养护页的服务器卡片。
+  final List<IpCareTarget> ipCareTargets;
+
   AppSettings copyWith({
     int? mixedPort,
     bool? allowLan,
@@ -225,6 +267,8 @@ class AppSettings {
     int? logLimit,
     String? panelUrl,
     String? panelPin,
+    String? ipCareToken,
+    List<IpCareTarget>? ipCareTargets,
   }) {
     return AppSettings(
       mixedPort: mixedPort ?? this.mixedPort,
@@ -270,6 +314,8 @@ class AppSettings {
       logLimit: logLimit ?? this.logLimit,
       panelUrl: panelUrl ?? this.panelUrl,
       panelPin: panelPin ?? this.panelPin,
+      ipCareToken: ipCareToken ?? this.ipCareToken,
+      ipCareTargets: ipCareTargets ?? this.ipCareTargets,
     );
   }
 
@@ -317,6 +363,8 @@ class AppSettings {
     'log_limit': logLimit,
     'panel_url': panelUrl,
     'panel_pin': panelPin,
+    'ip_care_token': ipCareToken,
+    'ip_care_targets': ipCareTargets.map((e) => e.toJson()).toList(),
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -395,6 +443,12 @@ class AppSettings {
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
       panelUrl: json['panel_url'] as String? ?? '',
       panelPin: json['panel_pin'] as String? ?? '',
+      ipCareToken: json['ip_care_token'] as String? ?? '',
+      ipCareTargets: (json['ip_care_targets'] as List?)
+              ?.whereType<Map>()
+              .map((e) => IpCareTarget.fromJson(Map<String, dynamic>.from(e)))
+              .toList() ??
+          const [],
     );
   }
 }

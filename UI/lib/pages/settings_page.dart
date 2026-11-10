@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../widgets/section.dart';
 import 'backup_page.dart';
+import 'firewall_page.dart';
+import 'ipcare_page.dart';
 import 'settings_appearance_page.dart';
 import 'settings_core_page.dart';
 import 'settings_save_page.dart';
@@ -108,6 +110,20 @@ class SettingsPage extends StatelessWidget {
               title: '代理规则',
               subtitle: _rulesLabel(),
               onTap: () => _open(context, SettingsRulesPage(state: state)),
+            ),
+            const SizedBox(height: 10),
+            _EntryCard(
+              icon: Icons.radar,
+              title: 'IP 养护',
+              subtitle: '检测服务器 IP 的 Google 区域，手动纠偏',
+              onTap: () => _open(context, IpCarePage(state: state)),
+            ),
+            const SizedBox(height: 10),
+            _EntryCard(
+              icon: Icons.shield_outlined,
+              title: '防火墙监控',
+              subtitle: '查看玄武端口、动态容量和运行日志',
+              onTap: () => _open(context, FirewallPage(state: state)),
             ),
             const SizedBox(height: 10),
             _EntryCard(

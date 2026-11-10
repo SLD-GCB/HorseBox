@@ -2,18 +2,7 @@
 
 HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建 Windows 和 Android，配置和节点全部来自 HorseUI 面板的订阅接口，客户端本身不包含任何节点。
 
-内置协议：**SkyHorse（天马）第四代**（原生 QUIC：TCP 走 QUIC 流 + SOCKS5，UDP 走 QUIC DATAGRAM，外层 Salamander 混淆轮换 + 前置门）与 **FastHorse（快马）第二代**（TCP/TLS/H2，单连接多流）。
-
-## 天马第四代 / 快马第二代
-
-- 天马移除第三代叠加的 smux，恢复 QUIC 原生多流，单流不再被 mux 窗口限制；
-- 天马 `max_streams_per_connection` 由流信号量强制，BBR / Brutal 可选；
-- 快马从连接池改为单条 H2 连接 + 原生多流，`max_streams_per_connection` 同时限制客户端和服务端；
-- 快马 `up_mbps` / `down_mbps` 走令牌桶，分别限制客户端上行和服务端下行；
-- 天马/快马端口轮换默认关闭，只有显式开启且端口数大于 1 才执行；
-- 客户端 TUN 自动把节点服务器 IP 写入 `route_exclude_address`，避免代理自身流量被 TUN 抓回。
-
-> 天马第四代和 10.28 之前的客户端不兼容；服务端、面板、客户端需要一起升级。
+内置协议：**SkyHorse（天马）第三代**（原生 QUIC：TCP 走 QUIC 流 + SOCKS5，UDP 走 QUIC DATAGRAM，外层 Salamander 混淆轮换 + 前置门）与 **FastHorse（快马）**（TCP/TLS/H2）。
 
 - **Windows**：以子进程方式运行官方 `sing-box.exe`，支持 TUN 和混合端口，关闭窗口后驻留托盘。
 - **Android**：通过 `libbox` + `VpnService` 接管流量，前台通知常驻，支持分应用代理。
@@ -87,13 +76,13 @@ UI/android/app/libs/libbox.aar
 
 ### 2. sing-box.exe（Windows）
 
-从构建产物复制 `sing-box.exe`（内置 SkyHorse 第四代 / FastHorse 第二代）到：
+从构建产物复制 `sing-box.exe`（内置 SkyHorse 第三代 / FastHorse）到：
 
 ```
 core/sing-box.exe
 ```
 
-天马第四代和快马第二代均为纯 Go 实现，不需要 `libcronet.dll`。
+三代天马和快马均为纯 Go 实现，不需要 `libcronet.dll`。
 
 ## 构建
 

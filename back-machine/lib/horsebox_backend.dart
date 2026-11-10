@@ -4,6 +4,7 @@ library;
 export 'src/clash_api.dart';
 export 'src/config_patch.dart';
 export 'src/core_paths.dart';
+export 'src/ipcare_client.dart';
 export 'src/models.dart';
 export 'src/panel_client.dart';
 export 'src/panel_usage.dart';

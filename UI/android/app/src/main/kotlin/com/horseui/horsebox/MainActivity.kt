@@ -1,8 +1,15 @@
 package com.horseui.horsebox
 
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import com.horseui.horsebox.ime.HorseImeService
@@ -17,11 +24,66 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var vpnPlugin: VpnPlugin? = null
+    private val notifyChannelId = "horsebox_status"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         vpnPlugin = VpnPlugin(this).also { it.attach(flutterEngine) }
         setupImeChannel(flutterEngine)
+        setupNotifyChannel(flutterEngine)
+    }
+
+    /// IP 养护等状态通知。
+    private fun setupNotifyChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "horsebox/notify",
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "show") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val title = call.argument<String>("title") ?: "HorseBox"
+            val body = call.argument<String>("body") ?: ""
+            if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1201)
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        notifyChannelId,
+                        "HorseBox 状态",
+                        NotificationManager.IMPORTANCE_DEFAULT,
+                    ),
+                )
+            }
+            val intent = Intent(this, MainActivity::class.java)
+            val pending = PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val builder = if (Build.VERSION.SDK_INT >= 26) {
+                Notification.Builder(this, notifyChannelId)
+            } else {
+                Notification.Builder(this)
+            }
+            val notification = builder
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(Notification.BigTextStyle().bigText(body))
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .build()
+            manager.notify((System.currentTimeMillis() % 100000).toInt(), notification)
+            result.success(true)
+        }
     }
 
     /// 系统输入法的状态查询与跳转，设置页用它显示"未启用 / 已启用 / 正在使用"。

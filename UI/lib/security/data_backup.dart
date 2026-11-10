@@ -38,6 +38,8 @@ class BackupPayload {
 
   int get credentials => counts['panel_credentials'] ?? 0;
 
+  int get ipCareTargets => counts['ip_care_targets'] ?? 0;
+
   String get themeMode => preferences['theme_mode'] as String? ?? 'dark';
 
   int get accent => (preferences['accent'] as num?)?.toInt() ?? 0xFF4C8F6F;
@@ -386,6 +388,7 @@ class BackupService {
         'profiles': len(decoded['profiles']),
         'ssh_hosts': len(decoded['ssh_hosts']),
         'panel_credentials': len(decoded['panel_credentials']),
+        'ip_care_targets': len(decoded['ip_care_targets']),
       };
     } catch (_) {
       return const {};

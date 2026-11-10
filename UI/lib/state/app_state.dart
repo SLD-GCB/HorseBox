@@ -131,7 +131,16 @@ class AppState extends ChangeNotifier {
     }
     final rawSettings = _store.get(_kSettings);
     if (rawSettings is Map) {
-      _settings = AppSettings.fromJson(Map<String, dynamic>.from(rawSettings));
+      final settingsMap = Map<String, dynamic>.from(rawSettings);
+      final rawTargets = settingsMap['ip_care_targets'];
+      if (rawTargets is List) {
+        for (final item in rawTargets) {
+          if (item is Map) {
+            item['token'] = await _unseal('${item['token'] ?? ''}');
+          }
+        }
+      }
+      _settings = AppSettings.fromJson(settingsMap);
       _applyKeyboardConfig();
     }
     final rawUsage = _store.get(_kUsage);
@@ -630,7 +639,16 @@ class AppState extends ChangeNotifier {
   Future<void> updateSettings(AppSettings next) async {
     _settings = next;
     _applyKeyboardConfig();
-    await _store.set(_kSettings, next.toJson());
+    final json = next.toJson();
+    final rawTargets = json['ip_care_targets'];
+    if (rawTargets is List) {
+      for (final item in rawTargets) {
+        if (item is Map) {
+          item['token'] = await _seal('${item['token'] ?? ''}');
+        }
+      }
+    }
+    await _store.set(_kSettings, json);
     _notify();
   }
 

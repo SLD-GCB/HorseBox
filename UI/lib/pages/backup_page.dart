@@ -263,7 +263,8 @@ class _BackupPageState extends State<BackupPage> {
               Text(
                 '将覆盖当前全部数据：'
                 '${payload.profiles} 个订阅、${payload.sshHosts} 台 SSH 主机、'
-                '${payload.credentials} 条密码本记录。',
+                '${payload.credentials} 条密码本记录、'
+                '${payload.ipCareTargets} 台 IP 养护服务器。',
                 style: const TextStyle(fontSize: 12, height: 1.6),
               ),
               const SizedBox(height: 8),
