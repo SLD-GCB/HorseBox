@@ -21,6 +21,7 @@ import com.horseui.horsebox.ime.ImeTheme
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
     private var vpnPlugin: VpnPlugin? = null
@@ -31,6 +32,36 @@ class MainActivity : FlutterActivity() {
         vpnPlugin = VpnPlugin(this).also { it.attach(flutterEngine) }
         setupImeChannel(flutterEngine)
         setupNotifyChannel(flutterEngine)
+        setupMonitorChannel(flutterEngine)
+    }
+
+    /// 防火墙 / IP 养护后台通知：由 Dart 同步目标，JobScheduler 定期检查。
+    private fun setupMonitorChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "horsebox/firewall_monitor",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "sync" -> {
+                    val config = call.argument<String>("config") ?: "[]"
+                    MonitorStore.saveConfig(this, config)
+                    MonitorScheduler.schedule(this)
+                    if (MonitorStore.targets(this).isEmpty()) {
+                        MonitorForegroundService.stop(this)
+                    } else {
+                        MonitorForegroundService.start(this)
+                    }
+                    result.success(true)
+                }
+                "checkNow" -> {
+                    thread(name = "horsebox-monitor-now") {
+                        FirewallMonitor.run(this)
+                    }
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     /// IP 养护等状态通知。

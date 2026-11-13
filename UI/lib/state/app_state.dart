@@ -9,6 +9,7 @@ import '../security/secret_vault.dart';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/firewall_monitor.dart';
 import '../platform/ime_channel.dart';
 import '../platform/vpn_channel.dart';
 import '../utils/app_paths.dart';
@@ -142,6 +143,7 @@ class AppState extends ChangeNotifier {
       }
       _settings = AppSettings.fromJson(settingsMap);
       _applyKeyboardConfig();
+      FirewallMonitorChannel.sync(_settings.ipCareTargets);
     }
     final rawUsage = _store.get(_kUsage);
     if (rawUsage is Map) {
@@ -649,6 +651,7 @@ class AppState extends ChangeNotifier {
       }
     }
     await _store.set(_kSettings, json);
+    await FirewallMonitorChannel.sync(next.ipCareTargets);
     _notify();
   }
 
