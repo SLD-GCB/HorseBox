@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'pinned_http.dart' as pinned;
 
-/// IP 养护设置�?class IpCareSettings {
+/// IP 养护设置。
+class IpCareSettings {
   const IpCareSettings({
     required this.targetRegion,
     required this.detectMode,
@@ -31,7 +32,8 @@ import 'pinned_http.dart' as pinned;
       );
 }
 
-/// 一次检测结果�?class IpCareCheck {
+/// 一次检测结果。
+class IpCareCheck {
   const IpCareCheck({
     required this.id,
     required this.ip,
@@ -67,7 +69,8 @@ import 'pinned_http.dart' as pinned;
       );
 }
 
-/// 一次纠偏任务�?class IpCareJob {
+/// 一次纠偏任务。
+class IpCareJob {
   const IpCareJob({
     required this.id,
     required this.status,
@@ -94,7 +97,8 @@ import 'pinned_http.dart' as pinned;
       );
 }
 
-/// IP 养护聚合状态�?class IpCareStatus {
+/// IP 养护聚合状态。
+class IpCareStatus {
   const IpCareStatus({
     required this.ip,
     required this.googleRegion,
@@ -151,7 +155,8 @@ import 'pinned_http.dart' as pinned;
   }
 }
 
-/// 面板 IP 养护 API 客户端，使用证书指纹 + 专用令牌�?class IpCareClient {
+/// 面板 IP 养护 API 客户端，使用证书指纹 + 专用令牌。
+class IpCareClient {
   IpCareClient({
     required String subscriptionUrl,
     required this.pin,
@@ -165,7 +170,7 @@ import 'pinned_http.dart' as pinned;
   static String _panelBase(String raw) {
     final uri = Uri.tryParse(raw.trim());
     if (uri == null || !uri.isScheme('https') || uri.host.isEmpty) {
-      throw ArgumentError('订阅地址不是有效�?HTTPS 地址');
+      throw ArgumentError('订阅地址不是有效的 HTTPS 地址');
     }
     return Uri(
       scheme: 'https',
@@ -202,7 +207,7 @@ import 'pinned_http.dart' as pinned;
       try {
         map = Map<String, dynamic>.from(jsonDecode(text) as Map);
       } catch (_) {
-        throw StateError('面板返回格式错误（HTTP ${resp.statusCode}�?);
+        throw StateError('面板返回格式错误（HTTP ${resp.statusCode}）');
       }
       if (map['code'] != 0) {
         throw StateError(map['msg']?.toString() ?? '面板请求失败');
@@ -468,6 +473,9 @@ class FirewallPortGuard {
     required this.floor,
     required this.ceiling,
     required this.status,
+    required this.closedAt,
+    required this.recoverAt,
+    required this.locked,
   });
 
   final String protocol;
@@ -478,6 +486,9 @@ class FirewallPortGuard {
   final double floor;
   final double ceiling;
   final String status;
+  final int closedAt;
+  final int recoverAt;
+  final bool locked;
 
   factory FirewallPortGuard.fromJson(Map<String, dynamic> json) =>
       FirewallPortGuard(
@@ -489,6 +500,9 @@ class FirewallPortGuard {
         floor: (json['floor'] as num?)?.toDouble() ?? 0,
         ceiling: (json['ceiling'] as num?)?.toDouble() ?? 0,
         status: json['status'] as String? ?? 'normal',
+        closedAt: (json['closed_at'] as num?)?.toInt() ?? 0,
+        recoverAt: (json['recover_at'] as num?)?.toInt() ?? 0,
+        locked: json['locked'] as bool? ?? false,
       );
 }
 
@@ -557,3 +571,4 @@ class ServerMetrics {
         uptime: (json['uptime'] as num?)?.toInt() ?? 0,
       );
 }
+

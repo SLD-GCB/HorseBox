@@ -3,6 +3,7 @@ import 'package:horsebox_backend/horsebox_backend.dart';
 
 import '../state/app_state.dart';
 import '../widgets/section.dart';
+import 'ipcare_detail_page.dart';
 
 /// IP 养护：每张卡片是一台服务器，点卡片直接检测，送中则自动纠偏。
 class IpCarePage extends StatefulWidget {
@@ -68,44 +69,13 @@ class _IpCarePageState extends State<IpCarePage> {
     }
   }
 
-  Future<void> _waitIdle(IpCareClient client, {int timeoutMs = 100000}) async {
-    final started = DateTime.now();
-    while (DateTime.now().difference(started).inMilliseconds < timeoutMs) {
-      final status = await client.status();
-      if (!status.busy) return;
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
-    }
-  }
-
-  Future<void> _maintain(IpCareTarget target) async {
-    if (_running.contains(target.id)) return;
-    setState(() => _running.add(target.id));
-    try {
-      final client = _client(target);
-      final before = await client.status();
-      final check = await client.check();
-      if (check.error.isNotEmpty) {
-        _snack(check.error);
-        await _refresh(target, quiet: true);
-        return;
-      }
-      // 自动纠偏已开启时由面板执行，App 不再重复触发；手动模式才由卡片补一次。
-      if (check.isCN && before.settings.warmMode != 'auto') {
-        final job = await client.warm();
-        _snack(job.error.isEmpty ? '发现送中，已纠偏 ${job.requests} 次' : job.error);
-      } else if (check.isCN) {
-        _snack('发现送中，面板正在自动纠偏');
-        await _waitIdle(client);
-      } else {
-        _snack('IP 正常，无需纠偏');
-      }
-      await _refresh(target, quiet: true);
-    } catch (e) {
-      _snack(e.toString());
-      setState(() => _errors[target.id] = e.toString());
-    } finally {
-      if (mounted) setState(() => _running.remove(target.id));
-    }
+  Future<void> _openDetail(IpCareTarget target) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => IpCareDetailPage(state: _state, target: target),
+      ),
+    );
+    if (mounted) await _refresh(target, quiet: true);
   }
 
   Future<void> _addTarget() async {
@@ -318,11 +288,6 @@ class _IpCarePageState extends State<IpCarePage> {
     if (saved == true) await _refresh(target);
   }
 
-  void _snack(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
-
   String _time(int ts) {
     if (ts <= 0) return '-';
     final d = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
@@ -419,7 +384,7 @@ class _IpCarePageState extends State<IpCarePage> {
     return SectionCard(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: running ? null : () => _maintain(target),
+        onTap: running ? null : () => _openDetail(target),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
@@ -477,7 +442,7 @@ class _IpCarePageState extends State<IpCarePage> {
                     const SizedBox(height: 4),
                     Text(
                       status == null
-                          ? '点击卡片开始维护'
+                          ? '点击卡片查看详情'
                           : '${status.googleRegion.isEmpty ? '未知' : status.googleRegion} · '
                               '信誉 ${status.trustScore >= 0 ? status.trustScore : '未检测'} · '
                               '${_time(status.lastCheck)}',

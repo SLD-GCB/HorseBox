@@ -265,6 +265,8 @@ class _FirewallPageState extends State<FirewallPage> {
     final items = guard?.ports ?? const <FirewallPortGuard>[];
     final abnormal =
         items.where((e) => e.status == 'watch' || e.status == 'closed').length;
+    final lockedOpen =
+        items.where((e) => e.locked && e.status != 'closed').length;
     return _SummaryCard(
       icon: Icons.speed,
       color: guard?.stale == true
@@ -277,14 +279,16 @@ class _FirewallPageState extends State<FirewallPage> {
           ? '加载中'
           : guard.stale
               ? 'fwd 未运行'
-              : '${items.length} 个活动端口',
+              : '${items.length} 个已允许端口',
       subtitle: guard == null
           ? ''
           : guard.stale
               ? '快照过期'
               : abnormal > 0
                   ? '$abnormal 个端口观察/关闭中'
-                  : '全部正常 · 资源${guard.healthy ? '健康' : '紧张'}',
+                  : lockedOpen > 0
+                      ? '$lockedOpen 个常开 · 资源${guard.healthy ? '健康' : '紧张'}'
+                      : '全部正常 · 资源${guard.healthy ? '健康' : '紧张'}',
       onTap: guard == null
           ? null
           : () => _open(FirewallGuardDetail(guard: guard)),
@@ -537,18 +541,41 @@ class FirewallStatusDetail extends StatelessWidget {
   }
 }
 
-class FirewallGuardDetail extends StatelessWidget {
+class FirewallGuardDetail extends StatefulWidget {
   const FirewallGuardDetail({super.key, required this.guard});
 
   final FirewallGuardState guard;
 
   @override
+  State<FirewallGuardDetail> createState() => _FirewallGuardDetailState();
+}
+
+class _FirewallGuardDetailState extends State<FirewallGuardDetail> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final guard = widget.guard;
     return Scaffold(
       appBar: AppBar(title: const Text('动态容量')),
       body: guard.ports.isEmpty
-          ? const Center(child: Text('暂无活动连接'))
+          ? const Center(child: Text('暂无容量数据：防火墙未启用、自动保护未开启，或端口未登记'))
           : ListView(
               padding: const EdgeInsets.all(14),
               children: [
@@ -593,12 +620,21 @@ class FirewallGuardDetail extends StatelessWidget {
                               ),
                               const Spacer(),
                               Text(
-                                '${item.current} / ${item.limit.toStringAsFixed(0)}',
-                                style: TextStyle(fontSize: 12, color: color),
+                                _statusText(item),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: color,
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
+                          Text(
+                            '当前 ${item.current} / 动态上限 ${item.limit.toStringAsFixed(0)}',
+                            style: TextStyle(fontSize: 12, color: color),
+                          ),
+                          const SizedBox(height: 2),
                           Text(
                             '基线 ${item.baseline.toStringAsFixed(1)} · '
                             '下限 ${item.floor.toStringAsFixed(0)} · '
@@ -608,6 +644,32 @@ class FirewallGuardDetail extends StatelessWidget {
                               color: scheme.onSurfaceVariant,
                             ),
                           ),
+                          if (item.status == 'closed' ||
+                              item.locked ||
+                              item.closedAt > 0) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              item.status == 'closed'
+                                  ? '关闭 ${_fmtTime(item.closedAt)}'
+                                  : '策略：常开',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '自动恢复：${_recoverText(item)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: item.locked
+                                    ? scheme.onSurfaceVariant
+                                    : Colors.orange,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           LinearProgressIndicator(
                             value: percent,
@@ -623,6 +685,32 @@ class FirewallGuardDetail extends StatelessWidget {
               ],
             ),
     );
+  }
+
+  String _statusText(FirewallPortGuard item) {
+    if (item.status == 'closed') {
+      return item.locked ? '永久关闭' : '临时关闭';
+    }
+    if (item.locked) return '永久开启';
+    if (item.status == 'watch') return '观察中';
+    return item.current == 0 ? '已开启' : '正常';
+  }
+
+  String _fmtTime(int ts) {
+    if (ts <= 0) return '—';
+    return DateTime.fromMillisecondsSinceEpoch(ts * 1000)
+        .toLocal()
+        .toString()
+        .substring(0, 19);
+  }
+
+  String _recoverText(FirewallPortGuard item) {
+    if (item.locked) return item.status == 'closed' ? '永久' : '常开';
+    if (item.status != 'closed') return '—';
+    if (item.recoverAt <= 0) return '永久';
+    final left = item.recoverAt - _now.millisecondsSinceEpoch ~/ 1000;
+    if (left <= 0) return '等待恢复';
+    return '${left ~/ 60}分${(left % 60).toString().padLeft(2, '0')}秒';
   }
 }
 
