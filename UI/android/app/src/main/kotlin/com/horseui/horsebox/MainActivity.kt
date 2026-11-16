@@ -1,6 +1,7 @@
 package com.horseui.horsebox
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,19 +13,24 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import com.horseui.horsebox.ime.HorseImeService
 import com.horseui.horsebox.ime.ImeClipboard
 import com.horseui.horsebox.ime.ImeFeedback
 import com.horseui.horsebox.ime.ImeLearning
 import com.horseui.horsebox.ime.ImePrefs
 import com.horseui.horsebox.ime.ImeTheme
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private var vpnPlugin: VpnPlugin? = null
+    private var appLockResult: MethodChannel.Result? = null
+    private var appLockPrompt: BiometricPrompt? = null
     private val notifyChannelId = "horsebox_status"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -33,6 +39,139 @@ class MainActivity : FlutterActivity() {
         setupImeChannel(flutterEngine)
         setupNotifyChannel(flutterEngine)
         setupMonitorChannel(flutterEngine)
+        setupAppLockChannel(flutterEngine)
+    }
+
+    companion object {
+        private const val APP_LOCK_REQUEST = 1202
+    }
+
+    private fun setupAppLockChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "horsebox/app_lock",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "available" -> result.success(availableAppLockMethods())
+                "authenticate" -> {
+                    val method = call.argument<String>("method") ?: "both"
+                    authenticateAppLock(result, method)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun availableAppLockMethods(): Map<String, Boolean> {
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        val credential = keyguard?.isDeviceSecure == true
+        val biometric = BiometricManager.from(this)
+            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+        val fingerprint = biometric &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
+        val face = biometric &&
+            Build.VERSION.SDK_INT >= 29 &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_FACE)
+        return mapOf(
+            "biometric" to biometric,
+            "fingerprint" to fingerprint,
+            "face" to face,
+            "credential" to credential,
+        )
+    }
+
+    private fun authenticateAppLock(result: MethodChannel.Result, method: String) {
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        val credentialAvailable = keyguard?.isDeviceSecure == true
+
+        if (method == "credential") {
+            showDeviceCredential(result, keyguard)
+            return
+        }
+
+        val allowed = if (method == "biometric") {
+            BiometricManager.Authenticators.BIOMETRIC_WEAK
+        } else {
+            BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        }
+        val manager = BiometricManager.from(this)
+        if (manager.canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
+            if (credentialAvailable) {
+                showDeviceCredential(result, keyguard)
+            } else {
+                result.success(false)
+            }
+            return
+        }
+
+        appLockPrompt?.cancelAuthentication()
+        appLockResult?.success(false)
+        appLockResult = result
+        try {
+            val prompt = BiometricPrompt(
+                this,
+                ContextCompat.getMainExecutor(this),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(
+                        authenticationResult: BiometricPrompt.AuthenticationResult,
+                    ) {
+                        appLockPrompt = null
+                        val pending = appLockResult
+                        appLockResult = null
+                        pending?.success(true)
+                    }
+
+                    override fun onAuthenticationError(
+                        errorCode: Int,
+                        errString: CharSequence,
+                    ) {
+                        appLockPrompt = null
+                        val pending = appLockResult
+                        appLockResult = null
+                        pending?.success(false)
+                    }
+                },
+            )
+            appLockPrompt = prompt
+            val info = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("解锁 HorseBox")
+                .setSubtitle("使用系统验证")
+                .setAllowedAuthenticators(allowed)
+                .build()
+            prompt.authenticate(info)
+        } catch (_: Exception) {
+            appLockPrompt = null
+            appLockResult = null
+            if (credentialAvailable) {
+                showDeviceCredential(result, keyguard)
+            } else {
+                result.success(false)
+            }
+        }
+    }
+
+    private fun showDeviceCredential(
+        result: MethodChannel.Result,
+        keyguard: KeyguardManager?,
+    ) {
+        if (keyguard == null || !keyguard.isDeviceSecure) {
+            result.success(false)
+            return
+        }
+        appLockResult?.success(false)
+        appLockResult = result
+        val intent = keyguard.createConfirmDeviceCredentialIntent(
+            "解锁 HorseBox",
+            "使用设备密码",
+        )
+        if (intent == null) {
+            appLockResult = null
+            result.success(false)
+            return
+        }
+        startActivityForResult(intent, APP_LOCK_REQUEST)
     }
 
     /// 防火墙 / IP 养护后台通知：由 Dart 同步目标，JobScheduler 定期检查。
@@ -234,6 +373,12 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == APP_LOCK_REQUEST) {
+            val pending = appLockResult
+            appLockResult = null
+            pending?.success(resultCode == RESULT_OK)
+            return
+        }
         if (vpnPlugin?.onActivityResult(requestCode, resultCode) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }

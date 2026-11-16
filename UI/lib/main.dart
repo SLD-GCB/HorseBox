@@ -9,6 +9,7 @@ import 'security/data_backup.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'utils/app_paths.dart';
+import 'widgets/app_lock_gate.dart';
 import 'widgets/password_keyboard.dart';
 
 Future<void> main() async {
@@ -60,8 +61,20 @@ class HorseBoxApp extends StatelessWidget {
             accent: state.settings.accent,
           ),
           themeMode: mode,
-          builder: (context, child) =>
-              PasswordKeyboardHost(child: child ?? const SizedBox.shrink()),
+          builder: (context, child) {
+            final background = Theme.of(context).scaffoldBackgroundColor;
+            return ColoredBox(
+              color: background,
+              child: AppLockGate(
+                enabled: Platform.isAndroid && state.settings.appLock,
+                timeoutSeconds: state.settings.appLockTimeout,
+                method: state.settings.appLockMethod,
+                child: PasswordKeyboardHost(
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
+            );
+          },
           home: HomeShell(state: state),
         );
       },

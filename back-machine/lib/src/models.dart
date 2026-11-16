@@ -125,6 +125,9 @@ class AppSettings {
     this.imeVibrateAmplitude = 140,
     this.autoConnect = false,
     this.logLimit = 800,
+    this.appLock = false,
+    this.appLockTimeout = 30,
+    this.appLockMethod = 'both',
     this.panelUrl = '',
     this.panelPin = '',
     this.ipCareToken = '',
@@ -213,6 +216,15 @@ class AppSettings {
   final bool autoConnect;
   final int logLimit;
 
+  /// Android 应用锁：启动/回前台时要求系统指纹或设备密码。
+  final bool appLock;
+
+  /// 回前台超过多少秒后重新锁；0 表示立即。
+  final int appLockTimeout;
+
+  /// 解锁方式：biometric / credential / both。
+  final String appLockMethod;
+
   /// 面板地址（仅 HTTPS），以及用于 TLS 指纹固定的 SHA-256。
   final String panelUrl;
   final String panelPin;
@@ -265,6 +277,9 @@ class AppSettings {
     int? imeVibrateAmplitude,
     bool? autoConnect,
     int? logLimit,
+    bool? appLock,
+    int? appLockTimeout,
+    String? appLockMethod,
     String? panelUrl,
     String? panelPin,
     String? ipCareToken,
@@ -312,6 +327,9 @@ class AppSettings {
       imeVibrateAmplitude: imeVibrateAmplitude ?? this.imeVibrateAmplitude,
       autoConnect: autoConnect ?? this.autoConnect,
       logLimit: logLimit ?? this.logLimit,
+      appLock: appLock ?? this.appLock,
+      appLockTimeout: appLockTimeout ?? this.appLockTimeout,
+      appLockMethod: appLockMethod ?? this.appLockMethod,
       panelUrl: panelUrl ?? this.panelUrl,
       panelPin: panelPin ?? this.panelPin,
       ipCareToken: ipCareToken ?? this.ipCareToken,
@@ -361,6 +379,9 @@ class AppSettings {
     'ime_vibrate_amplitude': imeVibrateAmplitude,
     'auto_connect': autoConnect,
     'log_limit': logLimit,
+    'app_lock': appLock,
+    'app_lock_timeout': appLockTimeout,
+    'app_lock_method': appLockMethod,
     'panel_url': panelUrl,
     'panel_pin': panelPin,
     'ip_care_token': ipCareToken,
@@ -441,6 +462,9 @@ class AppSettings {
           (json['ime_vibrate_amplitude'] as num?)?.toInt() ?? 140,
       autoConnect: json['auto_connect'] as bool? ?? false,
       logLimit: (json['log_limit'] as num?)?.toInt() ?? 800,
+      appLock: json['app_lock'] as bool? ?? false,
+      appLockTimeout: (json['app_lock_timeout'] as num?)?.toInt() ?? 30,
+      appLockMethod: json['app_lock_method'] as String? ?? 'both',
       panelUrl: json['panel_url'] as String? ?? '',
       panelPin: json['panel_pin'] as String? ?? '',
       ipCareToken: json['ip_care_token'] as String? ?? '',

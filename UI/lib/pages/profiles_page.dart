@@ -303,6 +303,9 @@ class _ProfilesPageState extends State<ProfilesPage> {
                           loading: _loading.contains(profile.id),
                           nodes: _nodes[profile.id],
                           error: _errors[profile.id],
+                          autoNode: profile.id == widget.state.activeId
+                              ? widget.state.autoNode
+                              : '',
                           onSelect: () => widget.state.setActive(profile.id),
                           onToggle: () => _toggle(profile),
                           onReload: () => _load(profile),
@@ -334,6 +337,7 @@ class _ProfileCard extends StatelessWidget {
     required this.loading,
     required this.nodes,
     required this.error,
+    required this.autoNode,
     required this.onSelect,
     required this.onToggle,
     required this.onReload,
@@ -355,6 +359,7 @@ class _ProfileCard extends StatelessWidget {
   final bool loading;
   final List<SubscriptionNode>? nodes;
   final String? error;
+  final String autoNode;
   final VoidCallback onSelect;
   final VoidCallback onToggle;
   final VoidCallback onReload;
@@ -551,7 +556,9 @@ class _ProfileCard extends StatelessWidget {
                     if (nodes!.length > 1)
                       _NodeRow(
                         title: '自动选择',
-                        subtitle: 'urltest 自动测速，选延迟最低的节点',
+                        subtitle: autoNode.isEmpty
+                            ? 'urltest 自动测速，选延迟最低的节点'
+                            : '当前：$autoNode',
                         type: 'auto',
                         selected: profile.selectedNode.isEmpty,
                         delay: null,

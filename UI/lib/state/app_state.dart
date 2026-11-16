@@ -59,6 +59,8 @@ class AppState extends ChangeNotifier {
   StreamSubscription<bool>? _vpnSub;
   Timer? _pollTimer;
   Timer? _tickTimer;
+  Timer? _autoNodeTimer;
+  String _autoNode = '';
   bool _stopping = false;
   bool _busy = false;
   bool _disposed = false;
@@ -76,6 +78,7 @@ class AppState extends ChangeNotifier {
   Profile? get activeProfile =>
       _profiles.where((item) => item.id == _activeId).firstOrNull;
   AppSettings get settings => _settings;
+  String get autoNode => _autoNode;
   CoreStatus get status => _status;
   String? get error => _error;
   String get coreVersion => _coreVersion;
@@ -193,21 +196,41 @@ class AppState extends ChangeNotifier {
       return;
     }
     final credential = _credentialForPanel(base);
-    if (credential == null) {
-      _usageInFlight.remove(target.id);
-      _usageError[target.id] = '先在「密码本」添加该面板的账号，才能查询用量';
-      _notify();
-      return;
-    }
+    final ipTarget = _ipCareTargetForPanel(base);
     try {
-      final usage = await PanelUsageClient.fetch(
-        base: base,
-        username: credential.username,
-        password: credential.password,
-        subToken: subToken,
-        certPin: _pinFor(target),
-        totpSecret: credential.totpSecret,
-      );
+      PanelUsage? usage;
+      if (ipTarget != null && ipTarget.token.trim().isNotEmpty) {
+        try {
+          usage = await PanelUsageClient.fetchWithToken(
+            base: base,
+            token: ipTarget.token,
+            subToken: subToken,
+            certPin: _pinFor(target),
+          );
+        } on PanelUsageException catch (e) {
+          // 旧面板没有 /api/ip-care/usage 时，仍允许用密码本回退。
+          if (credential == null) {
+            _usageError[target.id] = e.message;
+            _notify();
+            return;
+          }
+        }
+      }
+      if (usage == null) {
+        if (credential == null) {
+          _usageError[target.id] = '先在「密码本」添加该面板的账号，才能查询用量';
+          _notify();
+          return;
+        }
+        usage = await PanelUsageClient.fetch(
+          base: base,
+          username: credential.username,
+          password: credential.password,
+          subToken: subToken,
+          certPin: _pinFor(target),
+          totpSecret: credential.totpSecret,
+        );
+      }
       _usage[target.id] = usage;
       _usageError.remove(target.id);
       await _store.set(_kUsage, {
@@ -219,6 +242,19 @@ class AppState extends ChangeNotifier {
       _usageInFlight.remove(target.id);
       _notify();
     }
+  }
+
+  /// 按面板地址找 IP 养护目标；用它带的专用令牌查用量。
+  IpCareTarget? _ipCareTargetForPanel(String base) {
+    final normalized = normalizePanel(base);
+    if (normalized.isEmpty) return null;
+    for (final target in _settings.ipCareTargets) {
+      final targetBase = PanelUsageClient.baseOf(target.url);
+      if (targetBase != null && normalizePanel(targetBase) == normalized) {
+        return target;
+      }
+    }
+    return null;
   }
 
   /// 按面板地址（host:port）找密码本里对应那条管理员账号。
@@ -479,11 +515,13 @@ class AppState extends ChangeNotifier {
   Future<bool> selectNode(Profile profile, String tag) async {
     profile.selectedNode = tag;
     await _persistProfiles();
+    _autoNode = '';
     _notify();
     final api = _api;
     if (api == null || profile.id != _activeId) return false;
     try {
       await api.select('proxy', tag.isEmpty ? 'auto' : tag);
+      if (tag.isEmpty) unawaited(_refreshAutoNode());
       return true;
     } catch (_) {
       // 当前连接使用的是旧配置（还没有 selector 组），下次连接生效。
@@ -776,18 +814,48 @@ class AppState extends ChangeNotifier {
   void _startTimers() {
     _pollTimer?.cancel();
     _tickTimer?.cancel();
+    _autoNodeTimer?.cancel();
     _pollTimer = Timer.periodic(
       const Duration(seconds: 2),
       (_) => refreshConnections(),
     );
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) => _notify());
+    _autoNodeTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshAutoNode(),
+    );
+    unawaited(_refreshAutoNode());
+  }
+
+  Future<void> _refreshAutoNode() async {
+    final api = _api;
+    final profile = activeProfile;
+    if (api == null || profile == null || profile.selectedNode.isNotEmpty) {
+      if (_autoNode.isNotEmpty) {
+        _autoNode = '';
+        _notify();
+      }
+      return;
+    }
+    try {
+      final now = await api.current('auto');
+      if (now != null && now != _autoNode) {
+        _autoNode = now;
+        _notify();
+      }
+    } catch (_) {
+      // 内核还没就绪或代理组尚未建立，下一轮再试。
+    }
   }
 
   Future<void> _teardown() async {
     _pollTimer?.cancel();
     _tickTimer?.cancel();
+    _autoNodeTimer?.cancel();
     _pollTimer = null;
     _tickTimer = null;
+    _autoNodeTimer = null;
+    _autoNode = '';
 
     // 取消订阅本身可能等 WebSocket 关闭，不能让它挡住“断开”按钮。
     unawaited(_trafficSub?.cancel() ?? Future<void>.value());
@@ -886,6 +954,7 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _pollTimer?.cancel();
     _tickTimer?.cancel();
+    _autoNodeTimer?.cancel();
     _usageTimer?.cancel();
     _trafficSub?.cancel();
     _apiLogSub?.cancel();

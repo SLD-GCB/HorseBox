@@ -137,6 +137,20 @@ class HomePage extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  if (state.isConnected &&
+                      state.activeProfile?.selectedNode.isEmpty == true &&
+                      state.autoNode.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '自动选择：${state.autoNode}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 4),
                   Text(
                     state.activeProfile?.url ?? '从面板「用户 → 链接」复制 sing-box 订阅地址',

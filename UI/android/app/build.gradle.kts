@@ -63,6 +63,7 @@ kotlin {
 dependencies {
     // sing-box 的 gomobile 绑定（core/libbox.aar 同步过来）。
     implementation(files("libs/libbox.aar"))
+    implementation("androidx.biometric:biometric:1.1.0")
 }
 
 flutter {

@@ -34,7 +34,7 @@ class HorseBoxTheme {
             scheme.primary.withValues(alpha: 0.035),
             const Color(0xFF0F1011),
           )
-        : null;
+        : scheme.surface;
     final cardColor = dark
         ? Color.alphaBlend(
             scheme.primary.withValues(alpha: 0.06),
@@ -43,6 +43,7 @@ class HorseBoxTheme {
         : scheme.surfaceContainerLow;
     return ThemeData(
       useMaterial3: true,
+      brightness: brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
       cardTheme: CardThemeData(

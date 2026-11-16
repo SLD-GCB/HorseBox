@@ -127,6 +127,16 @@ class ClashApi {
     return delay;
   }
 
+  /// 读取某个代理组当前实际选中的节点（urltest 的 now）。
+  Future<String?> current(String group) async {
+    final json = await _getJson(
+      '/proxies/${Uri.encodeComponent(group)}',
+      timeout: const Duration(seconds: 3),
+    );
+    final now = json['now'];
+    return now is String && now.isNotEmpty ? now : null;
+  }
+
   /// 手动切换某个 selector 的节点。
   Future<void> select(String group, String name) async {
     final client = HttpClient();

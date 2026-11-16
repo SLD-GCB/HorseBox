@@ -154,6 +154,91 @@ class PanelUsageClient {
     }
   }
 
+  static Future<PanelUsage> fetchWithToken({
+    required String base,
+    required String token,
+    required String subToken,
+    String certPin = '',
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final root = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    final uri = Uri.tryParse(root);
+    if (uri == null || uri.host.isEmpty) {
+      throw PanelUsageException('面板地址不正确');
+    }
+    final pin = pinned.normalizePin(certPin);
+    final bool usePin = pin.length == 64 && uri.isScheme('https');
+    final HttpClient client = usePin
+        ? pinned.createPinnedHttpClient(pin, connectionTimeout: timeout)
+        : (HttpClient()
+            ..connectionTimeout = timeout
+            ..badCertificateCallback = (_, host, port) =>
+                host == uri.host && port == (uri.hasPort ? uri.port : 443));
+    client.userAgent = 'HorseBox';
+
+    try {
+      final request =
+          await client
+              .getUrl(
+                Uri.parse(
+                  '$root/api/ip-care/usage?sub_token=${Uri.encodeQueryComponent(subToken)}',
+                ),
+              )
+              .timeout(timeout);
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${token.trim()}',
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close().timeout(timeout);
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(timeout);
+      if (response.statusCode == HttpStatus.unauthorized ||
+          response.statusCode == HttpStatus.forbidden) {
+        throw PanelUsageException('IP 养护令牌无效或已被重置');
+      }
+      if (response.statusCode != HttpStatus.ok) {
+        throw PanelUsageException('读取用量失败（HTTP ${response.statusCode}）');
+      }
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) {
+        throw PanelUsageException('面板返回的用量格式不正确');
+      }
+      final data = decoded['data'];
+      if (data is! Map) {
+        final message = decoded['msg'];
+        throw PanelUsageException(
+          message is String && message.isNotEmpty ? message : '面板没有返回用量',
+        );
+      }
+      final row = Map<String, dynamic>.from(data);
+      return PanelUsage(
+        usedBytes: (row['used_bytes'] as num?)?.toInt() ?? 0,
+        quotaBytes: (row['quota_bytes'] as num?)?.toInt() ?? 0,
+        expireAt: PanelUsage._parseTime(row['expire_at']),
+        fetchedAt: DateTime.now(),
+        nodes: (row['nodes'] as num?)?.toInt() ?? 0,
+        account: row['account'] as String? ?? '',
+      );
+    } on PanelUsageException {
+      rethrow;
+    } on TlsException {
+      throw PanelUsageException(
+        usePin ? '面板证书与指纹不一致，无法查询用量' : '面板证书校验失败',
+      );
+    } on TimeoutException {
+      throw PanelUsageException('连接面板超时');
+    } on SocketException catch (e) {
+      throw PanelUsageException('无法连接面板：${e.message}');
+    } on FormatException {
+      throw PanelUsageException('面板返回的内容不是合法 JSON');
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   static Future<String> _login(
     HttpClient client,
     String root,
