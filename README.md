@@ -1,6 +1,7 @@
 # HorseBox
 
 _**本人在此郑重声明，我开发的面板遵守AGPL3.0协议，源码成品开源，不存在公开售卖和索要任何赞助的行为，如有假冒请勿上当**_
+
 HorseUI 面板的专用双端代理客户端。一套 Flutter 代码同时构建 Windows 和 Android，配置和节点全部来自 HorseUI 面板的订阅接口，客户端本身不包含任何节点。
 
 内置协议：**SkyHorse（天马）第三代**（原生 QUIC：TCP 走 QUIC 流 + SOCKS5，UDP 走 QUIC DATAGRAM，外层 Salamander 混淆轮换 + 前置门）与 **FastHorse（快马）**（TCP/TLS/H2）。
