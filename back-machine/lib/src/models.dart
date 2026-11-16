@@ -64,21 +64,22 @@ class IpCareTarget {
   String token;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'url': url,
-        'pin': pin,
-        'token': token,
-      };
+    'id': id,
+    'name': name,
+    'url': url,
+    'pin': pin,
+    'token': token,
+  };
 
   factory IpCareTarget.fromJson(Map<String, dynamic> json) => IpCareTarget(
-        id: json['id'] as String? ??
-            DateTime.now().microsecondsSinceEpoch.toString(),
-        name: json['name'] as String? ?? '未命名服务器',
-        url: json['url'] as String? ?? '',
-        pin: json['pin'] as String? ?? '',
-        token: json['token'] as String? ?? '',
-      );
+    id:
+        json['id'] as String? ??
+        DateTime.now().microsecondsSinceEpoch.toString(),
+    name: json['name'] as String? ?? '未命名服务器',
+    url: json['url'] as String? ?? '',
+    pin: json['pin'] as String? ?? '',
+    token: json['token'] as String? ?? '',
+  );
 }
 
 /// 全局设置。
@@ -128,6 +129,8 @@ class AppSettings {
     this.appLock = false,
     this.appLockTimeout = 30,
     this.appLockMethod = 'both',
+    this.appLockPinHash = '',
+    this.appLockPinSalt = '',
     this.panelUrl = '',
     this.panelPin = '',
     this.ipCareToken = '',
@@ -225,6 +228,10 @@ class AppSettings {
   /// 解锁方式：biometric / credential / both。
   final String appLockMethod;
 
+  /// Windows 独立应用 PIN（只保存哈希和盐）。
+  final String appLockPinHash;
+  final String appLockPinSalt;
+
   /// 面板地址（仅 HTTPS），以及用于 TLS 指纹固定的 SHA-256。
   final String panelUrl;
   final String panelPin;
@@ -280,6 +287,8 @@ class AppSettings {
     bool? appLock,
     int? appLockTimeout,
     String? appLockMethod,
+    String? appLockPinHash,
+    String? appLockPinSalt,
     String? panelUrl,
     String? panelPin,
     String? ipCareToken,
@@ -330,6 +339,8 @@ class AppSettings {
       appLock: appLock ?? this.appLock,
       appLockTimeout: appLockTimeout ?? this.appLockTimeout,
       appLockMethod: appLockMethod ?? this.appLockMethod,
+      appLockPinHash: appLockPinHash ?? this.appLockPinHash,
+      appLockPinSalt: appLockPinSalt ?? this.appLockPinSalt,
       panelUrl: panelUrl ?? this.panelUrl,
       panelPin: panelPin ?? this.panelPin,
       ipCareToken: ipCareToken ?? this.ipCareToken,
@@ -382,6 +393,8 @@ class AppSettings {
     'app_lock': appLock,
     'app_lock_timeout': appLockTimeout,
     'app_lock_method': appLockMethod,
+    'app_lock_pin_hash': appLockPinHash,
+    'app_lock_pin_salt': appLockPinSalt,
     'panel_url': panelUrl,
     'panel_pin': panelPin,
     'ip_care_token': ipCareToken,
@@ -465,10 +478,13 @@ class AppSettings {
       appLock: json['app_lock'] as bool? ?? false,
       appLockTimeout: (json['app_lock_timeout'] as num?)?.toInt() ?? 30,
       appLockMethod: json['app_lock_method'] as String? ?? 'both',
+      appLockPinHash: json['app_lock_pin_hash'] as String? ?? '',
+      appLockPinSalt: json['app_lock_pin_salt'] as String? ?? '',
       panelUrl: json['panel_url'] as String? ?? '',
       panelPin: json['panel_pin'] as String? ?? '',
       ipCareToken: json['ip_care_token'] as String? ?? '',
-      ipCareTargets: (json['ip_care_targets'] as List?)
+      ipCareTargets:
+          (json['ip_care_targets'] as List?)
               ?.whereType<Map>()
               .map((e) => IpCareTarget.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??

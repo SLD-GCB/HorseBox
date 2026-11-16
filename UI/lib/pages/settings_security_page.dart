@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../platform/app_lock.dart';
+import '../security/app_pin.dart';
 import '../state/app_state.dart';
 import '../widgets/section.dart';
 
@@ -32,21 +35,30 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
     });
   }
 
-  bool get _available => _methods.any;
+  bool get _available => Platform.isWindows
+      ? widget.state.settings.appLockPinHash.isNotEmpty
+      : _methods.any;
 
   Future<void> _setEnabled(bool enabled) async {
     if (_busy) return;
+    if (Platform.isWindows && enabled && !_available) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('先设置应用 PIN，再打开应用锁')));
+      return;
+    }
     setState(() => _busy = true);
     try {
-      final ok = await AppLockService.authenticate(
-        method: widget.state.settings.appLockMethod,
-      );
-      if (!ok) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('没有通过验证，应用锁未修改')));
+      if (!Platform.isWindows) {
+        final ok = await AppLockService.authenticate(
+          method: widget.state.settings.appLockMethod,
+        );
+        if (!ok) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('没有通过验证，应用锁未修改')));
+          }
+          return;
         }
-        return;
       }
       await widget.state.updateSettings(
         widget.state.settings.copyWith(appLock: enabled),
@@ -54,6 +66,21 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _setPin() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => const _PinDialog(),
+    );
+    if (result == null) return;
+    final salt = AppPin.newSalt();
+    await widget.state.updateSettings(
+      widget.state.settings.copyWith(
+        appLockPinSalt: salt,
+        appLockPinHash: AppPin.hash(result, salt),
+      ),
+    );
   }
 
   Future<void> _setMethod(String method) async {
@@ -69,6 +96,7 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
   }
 
   String _methodLabel(String method) {
+    if (Platform.isWindows) return 'Windows Hello';
     return switch (method) {
       'biometric' => '仅指纹 / 人脸',
       'credential' => '仅设备密码',
@@ -83,10 +111,15 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
       listenable: widget.state,
       builder: (context, _) {
         final settings = widget.state.settings;
-        final options = <String>[];
-        if (_methods.biometric && _methods.credential) options.add('both');
-        if (_methods.biometric) options.add('biometric');
-        if (_methods.credential) options.add('credential');
+        final methods = <String>[];
+        if (Platform.isWindows) {
+          if (_methods.biometric || _methods.credential) methods.add('both');
+        } else {
+          if (_methods.biometric && _methods.credential) methods.add('both');
+          if (_methods.biometric) methods.add('biometric');
+          if (_methods.credential) methods.add('credential');
+        }
+        final options = methods;
         final selected = options.contains(settings.appLockMethod)
             ? settings.appLockMethod
             : options.isEmpty
@@ -131,7 +164,11 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                                   : null,
                               title: const Text('应用锁'),
                               subtitle: Text(
-                                !_loaded
+                                Platform.isWindows
+                                    ? (_available
+                                          ? '打开或回到前台时，用应用 PIN 解锁'
+                                          : '先设置应用 PIN，再打开应用锁')
+                                    : !_loaded
                                     ? '正在检测设备解锁方式…'
                                     : !_available
                                     ? '这台手机没有设置锁屏密码，无法启用应用锁'
@@ -139,93 +176,124 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                               ),
                             ),
                             const Divider(height: 20),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    '设备支持的解锁方式',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
+                            if (!Platform.isWindows)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '设备支持的解锁方式',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  if (!_loaded)
-                                    Text(
-                                      '正在检测…',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
-                                    )
-                                  else if (options.isEmpty)
-                                    Text(
-                                      '没有可用的解锁方式',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: scheme.error,
-                                      ),
-                                    )
-                                  else ...[
-                                    if (_methods.biometric)
+                                    const SizedBox(height: 6),
+                                    if (!_loaded)
                                       Text(
-                                        '· $biometricLabel',
-                                        style: const TextStyle(fontSize: 12.5),
-                                      ),
-                                    if (_methods.credential)
-                                      const Text(
-                                        '· 设备密码 / PIN / 图案',
-                                        style: TextStyle(fontSize: 12.5),
-                                      ),
-                                  ],
-                                  const SizedBox(height: 14),
-                                  const Text(
-                                    '选择解锁方式',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: scheme.outlineVariant,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        isExpanded: true,
-                                        value: selected.isEmpty
-                                            ? null
-                                            : selected,
-                                        hint: const Text('请选择'),
-                                        items: [
-                                          for (final item in options)
-                                            DropdownMenuItem(
-                                              value: item,
-                                              child: Text(_methodLabel(item)),
+                                        '正在检测…',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                      )
+                                    else if (options.isEmpty)
+                                      Text(
+                                        '没有可用的解锁方式',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.error,
+                                        ),
+                                      )
+                                    else ...[
+                                      if (Platform.isWindows)
+                                        const Text(
+                                          '· Windows Hello（PIN / 人脸 / 指纹）',
+                                          style: TextStyle(fontSize: 12.5),
+                                        )
+                                      else ...[
+                                        if (_methods.biometric)
+                                          Text(
+                                            '· $biometricLabel',
+                                            style: const TextStyle(
+                                              fontSize: 12.5,
                                             ),
-                                        ],
-                                        onChanged: options.isNotEmpty && !_busy
-                                            ? (value) {
-                                                if (value != null)
-                                                  _setMethod(value);
-                                              }
-                                            : null,
+                                          ),
+                                        if (_methods.credential)
+                                          const Text(
+                                            '· 设备密码 / PIN / 图案',
+                                            style: TextStyle(fontSize: 12.5),
+                                          ),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      '选择解锁方式',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: scheme.outlineVariant,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          isExpanded: true,
+                                          value: selected.isEmpty
+                                              ? null
+                                              : selected,
+                                          hint: const Text('请选择'),
+                                          items: [
+                                            for (final item in options)
+                                              DropdownMenuItem(
+                                                value: item,
+                                                child: Text(_methodLabel(item)),
+                                              ),
+                                          ],
+                                          onChanged:
+                                              options.isNotEmpty && !_busy
+                                              ? (value) {
+                                                  if (value != null)
+                                                    _setMethod(value);
+                                                }
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
+                            if (Platform.isWindows)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('应用 PIN'),
+                                subtitle: Text(
+                                  settings.appLockPinHash.isEmpty
+                                      ? '未设置，先设置 6 位 PIN'
+                                      : '已设置 · 6 位数字',
+                                ),
+                                trailing: TextButton(
+                                  onPressed: _busy ? null : _setPin,
+                                  child: Text(
+                                    settings.appLockPinHash.isEmpty
+                                        ? '设置'
+                                        : '修改',
+                                  ),
+                                ),
+                              ),
                             const Divider(height: 20),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -277,6 +345,92 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _PinDialog extends StatefulWidget {
+  const _PinDialog();
+
+  @override
+  State<_PinDialog> createState() => _PinDialogState();
+}
+
+class _PinDialogState extends State<_PinDialog> {
+  final _first = TextEditingController();
+  final _second = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _first.dispose();
+    _second.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final pin = _first.text.trim();
+    final again = _second.text.trim();
+    if (pin.length != AppPin.length || int.tryParse(pin) == null) {
+      setState(() => _error = '请输入 ${AppPin.length} 位数字 PIN');
+      return;
+    }
+    if (pin != again) {
+      setState(() => _error = '两次输入不一致');
+      return;
+    }
+    Navigator.of(context).pop(pin);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('设置应用 PIN'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _first,
+            autofocus: true,
+            obscureText: true,
+            maxLength: AppPin.length,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '6 位数字 PIN',
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _second,
+            obscureText: true,
+            maxLength: AppPin.length,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '再输入一次',
+              counterText: '',
+            ),
+            onSubmitted: (_) => _save(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('保存')),
+      ],
     );
   }
 }

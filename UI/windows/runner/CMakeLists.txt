@@ -7,6 +7,7 @@ project(runner LANGUAGES CXX)
 #
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
+  "app_lock_plugin.cpp"
   "flutter_window.cpp"
   "main.cpp"
   "utils.cpp"
@@ -35,10 +36,19 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "windowsapp.lib")
+
+if(DEFINED ENV{WindowsSdkDir})
+  file(TO_CMAKE_PATH "$ENV{WindowsSdkDir}" HORSEBOX_WINDOWS_SDK)
+  target_include_directories(${BINARY_NAME} PRIVATE
+    "${HORSEBOX_WINDOWS_SDK}/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt")
+endif()
 
 if(MSVC)
   # 托盘菜单里有中文，统一按 UTF-8 编译源文件。
   target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
+  # Windows Hello 的 C++/WinRT 异步用 co_await，C++17 需要 /await。
+  target_compile_options(${BINARY_NAME} PRIVATE "/await")
 endif()
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 

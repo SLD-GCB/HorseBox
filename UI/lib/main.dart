@@ -66,9 +66,15 @@ class HorseBoxApp extends StatelessWidget {
             return ColoredBox(
               color: background,
               child: AppLockGate(
-                enabled: Platform.isAndroid && state.settings.appLock,
+                enabled: Platform.isAndroid
+                    ? state.settings.appLock
+                    : Platform.isWindows &&
+                          state.settings.appLock &&
+                          state.settings.appLockPinHash.isNotEmpty,
                 timeoutSeconds: state.settings.appLockTimeout,
                 method: state.settings.appLockMethod,
+                pinHash: state.settings.appLockPinHash,
+                pinSalt: state.settings.appLockPinSalt,
                 child: PasswordKeyboardHost(
                   child: child ?? const SizedBox.shrink(),
                 ),

@@ -133,14 +133,14 @@ class SettingsPage extends StatelessWidget {
               subtitle: _coreLabel(),
               onTap: () => _open(context, SettingsCorePage(state: state)),
             ),
-            if (Platform.isAndroid) ...[
+            if (Platform.isAndroid || Platform.isWindows) ...[
               const SizedBox(height: 10),
               _EntryCard(
                 icon: Icons.lock_outline,
                 title: '应用锁',
                 subtitle: state.settings.appLock
-                    ? '已开启 · 指纹或设备密码'
-                    : '用指纹或设备密码保护 HorseBox',
+                    ? '已开启 · 系统验证'
+                    : '用系统验证保护 HorseBox',
                 onTap: () =>
                     _open(context, SettingsSecurityPage(state: state)),
               ),

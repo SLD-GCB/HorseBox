@@ -4,6 +4,7 @@
 
 #include <optional>
 
+#include "app_lock_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
 
@@ -37,6 +38,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterAppLockChannel(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
