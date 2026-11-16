@@ -40,6 +40,33 @@ class MainActivity : FlutterFragmentActivity() {
         setupNotifyChannel(flutterEngine)
         setupMonitorChannel(flutterEngine)
         setupAppLockChannel(flutterEngine)
+        setupSecureWindowChannel(flutterEngine)
+    }
+
+    /// 应用锁开启时禁止系统截图/最近任务缩略图。
+    private fun setupSecureWindowChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "horsebox/secure_window",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled") == true
+                    if (enabled) {
+                        window.setFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                        )
+                    } else {
+                        window.clearFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                        )
+                    }
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     companion object {

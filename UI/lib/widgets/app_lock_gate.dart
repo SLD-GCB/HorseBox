@@ -32,6 +32,7 @@ class AppLockGate extends StatefulWidget {
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   bool _locked = false;
   bool _prompting = false;
+  bool _backgroundLock = false;
   DateTime? _pausedAt;
   DateTime? _lastPromptAt;
 
@@ -75,6 +76,13 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       if (!_prompting) _pausedAt ??= DateTime.now();
+      if (Platform.isAndroid && widget.enabled && !_locked) {
+        // 切后台立即盖锁屏，让最近任务缩略图不显示原页面。
+        setState(() {
+          _locked = true;
+          _backgroundLock = true;
+        });
+      }
       return;
     }
     if (state != AppLifecycleState.resumed) return;
@@ -82,6 +90,12 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     _pausedAt = null;
     if (pausedAt == null) return;
     final elapsed = DateTime.now().difference(pausedAt).inSeconds;
+    if (_backgroundLock && elapsed < widget.timeoutSeconds) {
+      _backgroundLock = false;
+      setState(() => _locked = false);
+      return;
+    }
+    _backgroundLock = false;
     if (_locked || elapsed >= widget.timeoutSeconds) {
       setState(() => _locked = true);
       unawaited(_prompt());
@@ -103,6 +117,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       final ok = await AppLockService.authenticate(method: widget.method);
       if (ok && mounted) {
         _pausedAt = null;
+        _backgroundLock = false;
         setState(() => _locked = false);
       }
     } finally {
@@ -125,6 +140,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
                       pinSalt: widget.pinSalt,
                       onUnlocked: () {
                         _pausedAt = null;
+                        _backgroundLock = false;
                         setState(() => _locked = false);
                       },
                     )

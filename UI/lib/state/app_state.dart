@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../platform/firewall_monitor.dart';
 import '../platform/ime_channel.dart';
+import '../platform/secure_window.dart';
 import '../platform/vpn_channel.dart';
 import '../utils/app_paths.dart';
 import '../utils/rule_assets.dart';
@@ -146,6 +147,7 @@ class AppState extends ChangeNotifier {
       }
       _settings = AppSettings.fromJson(settingsMap);
       _applyKeyboardConfig();
+      await SecureWindow.setEnabled(Platform.isAndroid && _settings.appLock);
       FirewallMonitorChannel.sync(_settings.ipCareTargets);
     }
     final rawUsage = _store.get(_kUsage);
@@ -689,6 +691,7 @@ class AppState extends ChangeNotifier {
       }
     }
     await _store.set(_kSettings, json);
+    await SecureWindow.setEnabled(Platform.isAndroid && next.appLock);
     await FirewallMonitorChannel.sync(next.ipCareTargets);
     _notify();
   }
